@@ -68,6 +68,16 @@ class AuditEventType(Enum):
     SEC_RATE_LIMIT = "security.rate_limit"
     SEC_PERMISSION_DENIED = "security.permission_denied"
     SEC_INPUT_VALIDATION = "security.input_validation"
+    SEC_SUSPICIOUS_REQUEST = "security.suspicious_request"
+    SEC_IP_BLACKLISTED = "security.ip_blacklisted"
+    SEC_CSRF_VIOLATION = "security.csrf_violation"
+    SEC_XSS_ATTEMPT = "security.xss_attempt"
+    SEC_INJECTION_ATTEMPT = "security.injection_attempt"
+    SEC_RATE_LIMIT_EXCEEDED = "security.rate_limit_exceeded"
+    SEC_BURST_LIMIT_EXCEEDED = "security.burst_limit_exceeded"
+    SEC_GLOBAL_RATE_LIMIT_EXCEEDED = "security.global_rate_limit_exceeded"
+    SEC_DATA_ENCRYPTION = "security.data_encryption"
+    SEC_DATA_DECRYPTION = "security.data_decryption"
     
     # System events
     SYS_STARTUP = "system.startup"

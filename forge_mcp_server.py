@@ -39,6 +39,7 @@ from metrics_collector import get_metrics_collector, start_metrics_collection
 from alerting_system import get_alerting_system, start_alerting_service
 from authentication_system import AuthenticationSystem, Permission, authentication_middleware
 from audit_logger import get_audit_logger, AuditEventType, AuditSeverity, log_auth_success, log_auth_failure, log_server_create, log_server_delete, log_permission_denied
+from protection_mechanisms import get_protection_mechanisms, protect_endpoint, DEFAULT_CSRF_TOKEN_EXPIRY
 
 # Setup logging
 logging.basicConfig(
@@ -60,6 +61,9 @@ mcp_server = FastMCP("MCP-Forge Server", description="A server that creates and 
 # Initialize the server manager
 server_manager = ServerManager()
 next_port = None  # Will be initialized in main()
+
+# Initialize protection mechanisms
+protection = get_protection_mechanisms()
 
 @mcp_server.resource("servers://list")
 def list_servers_resource() -> str:
@@ -190,6 +194,7 @@ def validate_create_server_request(name: Optional[str], description: str,
     return True, "", validated_params
 
 @mcp_server.tool()
+@protect_endpoint
 def create_server(name: Optional[str] = None, description: str = "MCP Server", 
                   capabilities: Optional[List[str]] = None,
                   handlers: Optional[List[str]] = None,
@@ -421,9 +426,10 @@ def create_server(name: Optional[str] = None, description: str = "MCP Server",
         return {"status": "error", "error": error_msg}
 
 @mcp_server.tool()
+@protect_endpoint
 def start_server(server_id: str) -> Dict[str, Any]:
     """
-    Start a managed server instance.
+    Start a stopped server instance.
     
     Args:
         server_id: ID of the server to start.
@@ -489,9 +495,10 @@ def start_server(server_id: str) -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def stop_server(server_id: str) -> Dict[str, Any]:
     """
-    Stop a managed server instance.
+    Stop a running server instance.
     
     Args:
         server_id: ID of the server to stop.
@@ -557,9 +564,10 @@ def stop_server(server_id: str) -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def delete_server(server_id: str) -> Dict[str, Any]:
     """
-    Delete a managed server instance.
+    Delete a server instance.
     
     Args:
         server_id: ID of the server to delete.
@@ -686,6 +694,7 @@ def delete_server(server_id: str) -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def restart_server(server_id: str) -> Dict[str, Any]:
     """
     Restart a managed server instance.
@@ -728,6 +737,7 @@ def restart_server(server_id: str) -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def list_servers(include_details: bool = False) -> Dict[str, Any]:
     """
     List all managed server instances.
@@ -777,6 +787,7 @@ def list_servers(include_details: bool = False) -> Dict[str, Any]:
     }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_server_logs(server_id: str, log_type: str = "all", max_lines: int = 50) -> Dict[str, Any]:
     """
     Get logs from a server instance.
@@ -805,6 +816,7 @@ def get_server_logs(server_id: str, log_type: str = "all", max_lines: int = 50) 
     }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_server_process_stats(server_id: str) -> Dict[str, Any]:
     """
     Get process statistics for a server.
@@ -837,6 +849,7 @@ def get_server_process_stats(server_id: str) -> Dict[str, Any]:
     }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_all_process_stats() -> Dict[str, Any]:
     """
     Get process statistics for all servers.
@@ -859,6 +872,7 @@ def get_all_process_stats() -> Dict[str, Any]:
     }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_system_stats() -> Dict[str, Any]:
     """
     Get system-wide resource statistics.
@@ -879,6 +893,7 @@ def get_system_stats() -> Dict[str, Any]:
     }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_server_process_history(server_id: str, metric: str = "cpu", points: int = 10) -> Dict[str, Any]:
     """
     Get historical process data for a server.
@@ -939,6 +954,7 @@ def system_stats_resource() -> str:
     return json.dumps(stats, indent=2)
 
 @mcp_server.tool()
+@protect_endpoint
 def get_config(section: Optional[str] = None, key: Optional[str] = None) -> Dict[str, Any]:
     """
     Get server configuration.
@@ -991,6 +1007,7 @@ def get_config(section: Optional[str] = None, key: Optional[str] = None) -> Dict
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def set_config(section: str, key: str, value: Any) -> Dict[str, Any]:
     """
     Set configuration value.
@@ -1022,6 +1039,7 @@ def set_config(section: str, key: str, value: Any) -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def update_config_section(section: str, values: Dict[str, Any]) -> Dict[str, Any]:
     """
     Update an entire configuration section.
@@ -1052,6 +1070,7 @@ def update_config_section(section: str, values: Dict[str, Any]) -> Dict[str, Any
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def validate_config() -> Dict[str, Any]:
     """
     Validate the current configuration.
@@ -1110,6 +1129,7 @@ def generate_server_id() -> str:
     return server_id
 
 @mcp_server.tool()
+@protect_endpoint
 def set_resource_limit(server_id: str, limit_name: str, limit_value: float) -> Dict[str, Any]:
     """
     Set a resource limit for a server.
@@ -1142,6 +1162,7 @@ def set_resource_limit(server_id: str, limit_name: str, limit_value: float) -> D
     }
 
 @mcp_server.tool()
+@protect_endpoint
 def set_default_resource_limit(limit_name: str, limit_value: float) -> Dict[str, Any]:
     """
     Set a default resource limit for all servers.
@@ -1166,6 +1187,7 @@ def set_default_resource_limit(limit_name: str, limit_value: float) -> Dict[str,
     }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_resource_limits(server_id: str) -> Dict[str, Any]:
     """
     Get resource limits for a server.
@@ -1228,6 +1250,7 @@ def system_resources_resource() -> str:
     return json.dumps(stats, indent=2)
 
 @mcp_server.tool()
+@protect_endpoint
 def shutdown_server(timeout: Optional[float] = None, reason: str = "User requested shutdown") -> Dict[str, Any]:
     """
     Initiate a graceful shutdown of the MCP-Forge server.
@@ -1256,6 +1279,7 @@ def shutdown_server(timeout: Optional[float] = None, reason: str = "User request
     }
 
 @mcp_server.tool()
+@protect_endpoint
 def manage_auto_scaling(action: str, group_name: str,
                        min_instances: Optional[int] = None,
                        max_instances: Optional[int] = None,
@@ -1700,6 +1724,7 @@ def system_alerts_history_resource() -> str:
         return json.dumps({"error": str(e)}, indent=2)
 
 @mcp_server.tool()
+@protect_endpoint
 def acknowledge_alert(alert_id: str, user: str) -> Dict[str, Any]:
     """
     Acknowledge an alert.
@@ -1733,6 +1758,7 @@ def acknowledge_alert(alert_id: str, user: str) -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def resolve_alert(alert_id: str, resolution_message: Optional[str] = None) -> Dict[str, Any]:
     """
     Resolve an alert.
@@ -1766,6 +1792,7 @@ def resolve_alert(alert_id: str, resolution_message: Optional[str] = None) -> Di
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_logs(source: str = "system", log_level: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
     """
     Get logs from the system or a specific server.
@@ -1813,6 +1840,7 @@ def get_logs(source: str = "system", log_level: Optional[str] = None, limit: int
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_server_status(server_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Get status information for a server or all servers.
@@ -1855,6 +1883,7 @@ def get_server_status(server_id: Optional[str] = None) -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_metrics(source: str = "system", time_period: str = "hour") -> Dict[str, Any]:
     """
     Get performance metrics for the system or a specific server.
@@ -1896,6 +1925,7 @@ def get_metrics(source: str = "system", time_period: str = "hour") -> Dict[str, 
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def get_alerts(active_only: bool = True, limit: int = 100) -> Dict[str, Any]:
     """
     Get system alerts.
@@ -1930,9 +1960,10 @@ def get_alerts(active_only: bool = True, limit: int = 100) -> Dict[str, Any]:
 
 # Authentication-related tools
 @mcp_server.tool()
+@protect_endpoint
 def login(username: str, password: str) -> Dict[str, Any]:
     """
-    Authenticate and get a session token.
+    Authenticate a user and return a token.
     
     Args:
         username: Username for authentication
@@ -1972,6 +2003,7 @@ def login(username: str, password: str) -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def logout(token: str) -> Dict[str, Any]:
     """
     Invalidate a session token.
@@ -2018,6 +2050,7 @@ def logout(token: str) -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def list_users() -> Dict[str, Any]:
     """
     List all users.
@@ -2071,13 +2104,14 @@ def list_users() -> Dict[str, Any]:
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def update_user(target_username: str, 
                 password: Optional[str] = None,
                 role: Optional[str] = None,
                 enabled: Optional[bool] = None,
                 metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Update a user.
+    Update user details.
     
     Args:
         target_username: Username of the user to update
@@ -2171,6 +2205,7 @@ def update_user(target_username: str,
         }
 
 @mcp_server.tool()
+@protect_endpoint
 def delete_user(target_username: str) -> Dict[str, Any]:
     """
     Delete a user.
@@ -2242,169 +2277,152 @@ def delete_user(target_username: str) -> Dict[str, Any]:
             "error": f"Error deleting user: {str(e)}"
         }
 
+@mcp_server.tool()
+@protect_endpoint
+def get_csrf_token(session_id: str) -> Dict[str, Any]:
+    """
+    Generate a CSRF token for a session.
+    
+    Args:
+        session_id: Session ID to generate a token for
+        
+    Returns:
+        Dictionary with the generated token
+    """
+    # Validate the session ID
+    if not session_id:
+        return {
+            "status": "error",
+            "code": 400,
+            "error": "Session ID is required"
+        }
+    
+    # Generate a CSRF token
+    token = protection.generate_csrf_token(session_id)
+    
+    # Log the token generation
+    get_audit_logger().log_security_event(
+        AuditEventType.SEC_DATA_ENCRYPTION,  # Using data encryption event type as a proxy for token creation
+        None,
+        "unknown",  # We don't have the client IP in this context
+        None,
+        {"session_id": session_id, "purpose": "csrf_token_generation"}
+    )
+    
+    return {
+        "status": "success",
+        "token": token,
+        "expires_in": DEFAULT_CSRF_TOKEN_EXPIRY
+    }
+
 def main():
-    """Main entry point."""
+    """Main function to initialize and run the MCP-Forge Server."""
     global next_port
     
-    # Configure logging system first
-    logging_system = configure_logging()
-    logger = get_logger('forge_mcp_server')
-    
-    # Load configuration
-    config_manager.load_config()
-    server_config = config_manager.get_server_config()
-    
-    # Set up argument parser with defaults from config
-    parser = argparse.ArgumentParser(description="MCP-Forge Server")
-    parser.add_argument("--port", type=int, default=server_config["port"], 
-                        help=f"Port to listen on (default: {server_config['port']})")
-    parser.add_argument("--host", default=server_config["host"], 
-                        help=f"Host to bind to (default: {server_config['host']})")
-    parser.add_argument("--log-level", default=server_config["log_level"],
-                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                        help=f"Logging level (default: {server_config['log_level']})")
-    parser.add_argument("--shutdown-timeout", type=float, default=30.0,
-                        help="Shutdown timeout in seconds (default: 30.0)")
-    parser.add_argument("--auth-config", default="auth_config.json",
-                        help="Authentication configuration file path (default: auth_config.json)")
-    parser.add_argument("--audit-log-dir", default="audit_logs",
-                        help="Directory for audit logs (default: audit_logs)")
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='MCP-Forge Server')
+    parser.add_argument('--port', type=int, default=9000, help='Port to listen on')
+    parser.add_argument('--host', type=str, default='localhost', help='Host to bind to')
+    parser.add_argument('--config', type=str, default='forge_config.json', help='Configuration file path')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+    parser.add_argument('--enable-autoscaling', action='store_true', help='Enable auto-scaling')
     args = parser.parse_args()
     
-    # Set logging level
-    logging.getLogger().setLevel(getattr(logging, args.log_level))
+    # Set up logging level based on arguments
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+        logger.debug("Debug logging enabled")
     
-    # Set environment variables for the MCP SDK
-    os.environ["MCP_PORT"] = str(args.port)
-    os.environ["MCP_HOST"] = args.host
+    # Configure logging system
+    configure_logging(log_level="DEBUG" if args.debug else "INFO")
     
-    # Initialize next port number (for child servers)
+    # Load configuration
+    config_manager.set_config_file(args.config)
+    try:
+        config_manager.load_config()
+        logger.info(f"Configuration loaded from {args.config}")
+    except Exception as e:
+        logger.error(f"Error loading configuration: {e}")
+        logger.info("Using default configuration")
+    
+    # Set base port for child servers
     next_port = args.port + 1
-    server_manager.next_port = next_port
+    logger.info(f"Starting port for child servers: {next_port}")
     
-    logger.info(f"Starting MCP-Forge Server on {args.host}:{args.port}")
+    # Initialize the authentication system
+    auth_system = AuthenticationSystem()
     
-    # Initialize authentication system
-    auth_system = AuthenticationSystem(config_path=args.auth_config)
-    logger.info("Authentication system initialized")
+    # Register shutdown hook
+    register_shutdown_hook(lambda: logger.info("Shutting down MCP-Forge Server..."))
     
-    # Initialize audit logger
-    audit_logger = get_audit_logger()
-    logger.info("Audit logging system initialized")
-    
-    # Log system startup event
-    audit_logger.log_system_event(
-        AuditEventType.SYS_STARTUP,
-        details={"host": args.host, "port": args.port}
-    )
-    
-    # Initialize monitoring components
+    # Set shutdown timeout
+    set_shutdown_timeout(30.0)  # 30 seconds
     
     # Initialize log aggregator
-    log_aggregator = initialize_log_aggregator(logging_system)
+    initialize_log_aggregator()
     
-    # Initialize status reporter
-    status_reporter = get_status_reporter()
-    status_reporter.register_forge_server(
-        "forge-server", 
-        "MCP Forge Server", 
-        os.getpid()
-    )
+    # Start background services
+    start_aggregation_service()
+    start_status_reporting()
+    start_metrics_collection()
+    start_alerting_service()
     
-    # Initialize metrics collector
-    metrics_collector = get_metrics_collector()
+    # Initialize protection mechanisms with server configuration
+    protection = get_protection_mechanisms()
     
-    # Initialize alerting system
-    alerting_system = get_alerting_system()
+    # Configure security headers
+    security_headers = protection.security_headers.get_security_headers()
+    logger.info("Security protection mechanisms initialized")
     
-    # Register alert handlers
-    alerting_system.register_alert_handler(
-        "resource_monitor",
-        lambda: []  # Placeholder - will be replaced with actual handler
-    )
+    # Set up server CORS and security settings
+    server_hardening = protection.server_hardening.get_hardening_middleware_config()
     
-    logger.info("Logging and monitoring components initialized")
+    # Log system startup event
+    get_audit_logger().log_system_event(AuditEventType.SYS_STARTUP, {
+        "version": "1.0.0",  # Replace with actual version
+        "host": args.host,
+        "port": args.port,
+        "config_file": args.config,
+        "debug": args.debug
+    })
     
-    # Recover any existing server instances
-    server_manager.recover_instances()
+    # Auto-start any previously created servers if configured
+    if config_manager.get("server", "auto_start", True):
+        _auto_start_servers()
     
-    # Update next_port based on recovered instances
-    next_port = server_manager.next_port
+    # Enable auto-scaling if requested
+    if args.enable_autoscaling or config_manager.get("resources", "enable_auto_scaling", False):
+        auto_scaler = get_auto_scaler()
+        auto_scaler.start()
+        logger.info("Auto-scaling enabled")
     
-    # Configure shutdown timeout
-    set_shutdown_timeout(args.shutdown_timeout)
+    # Set up the MCP server headers with secure defaults
+    headers = {
+        "Content-Security-Policy": security_headers.get("Content-Security-Policy", protection.csp.default_policy),
+        "X-Content-Type-Options": security_headers.get("X-Content-Type-Options", "nosniff"),
+        "X-Frame-Options": security_headers.get("X-Frame-Options", "DENY"),
+        "Strict-Transport-Security": security_headers.get("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    }
     
-    # Register shutdown hooks
-    register_shutdown_hook(
-        lambda: logger.info("Shutting down MCP-Forge Server..."),
-        priority=100,
-        name="shutdown_announcement"
-    )
-    register_shutdown_hook(
-        lambda: server_manager.stop_all_servers(),
-        priority=50,
-        name="stop_child_servers"
-    )
-    register_shutdown_hook(
-        lambda: get_auto_scaler().stop(),
-        priority=75,
-        name="stop_auto_scaler"
-    )
-    register_shutdown_hook(
-        lambda: log_aggregator.stop_aggregation(),
-        priority=60,
-        name="stop_log_aggregator"
-    )
-    register_shutdown_hook(
-        lambda: status_reporter.stop_reporting(),
-        priority=60,
-        name="stop_status_reporter"
-    )
-    register_shutdown_hook(
-        lambda: metrics_collector.stop_collection(),
-        priority=60,
-        name="stop_metrics_collector"
-    )
-    register_shutdown_hook(
-        lambda: alerting_system.stop_alerting(),
-        priority=60,
-        name="stop_alerting_system"
-    )
-    register_shutdown_hook(
-        lambda: logger.info("MCP-Forge Server shutdown complete"),
-        priority=-100,
-        name="shutdown_complete"
-    )
-    
-    # Start monitoring components
-    logger.info("Starting monitoring components")
-    import asyncio
-    
-    # Create background tasks for monitoring components
-    asyncio.create_task(start_aggregation_service(
-        interval_seconds=server_config.get("logging", {}).get("aggregation_interval", 30)
-    ))
-    asyncio.create_task(start_status_reporting(
-        interval_seconds=server_config.get("monitoring", {}).get("status_interval", 60)
-    ))
-    asyncio.create_task(start_metrics_collection(
-        interval_seconds=server_config.get("monitoring", {}).get("metrics_interval", 60)
-    ))
-    asyncio.create_task(start_alerting_service(
-        interval_seconds=server_config.get("monitoring", {}).get("alert_interval", 60)
-    ))
-    
-    logger.info("Monitoring components started")
+    # Log server information
+    logger.info(f"Starting MCP-Forge Server on {args.host}:{args.port}")
+    logger.info(f"Server manager initialized with {len(server_manager.get_all_instances())} servers")
     
     # Start the server
     try:
-        mcp_server.run()
+        mcp_server.start(host=args.host, port=args.port, headers=headers)
     except KeyboardInterrupt:
-        logger.info("Server shutting down due to keyboard interrupt")
+        logger.info("Server interrupted by user")
     except Exception as e:
-        logger.error(f"Server crashed: {e}")
-        
-    return 0
+        logger.error(f"Error starting server: {e}")
+    finally:
+        # Ensure proper shutdown
+        get_shutdown_handler().shutdown("Server shutting down", 10.0)
+        # Log system shutdown event
+        get_audit_logger().log_system_event(AuditEventType.SYS_SHUTDOWN, {
+            "reason": "Normal shutdown"
+        })
 
 if __name__ == "__main__":
     sys.exit(main()) 

@@ -1,4 +1,4 @@
-# MCP-Forge: Dynamic MCP Server Generator and Manager
+m# MCP-Forge: Dynamic MCP Server Generator and Manager
 
 MCP-Forge is a powerful framework for dynamically generating, managing, and monitoring Model Context Protocol (MCP) servers. Using the official MCP SDK, this tool enables you to create specialized MCP servers on demand through a centralized interface.
 
@@ -15,6 +15,7 @@ MCP-Forge is a powerful framework for dynamically generating, managing, and moni
 - **Alerting System**: Receive notifications for critical issues through various channels
 - **Comprehensive API**: Full-featured client API for managing the entire server ecosystem
 - **MCP SDK Integration**: Built on top of the official Model Context Protocol SDK
+- **Enterprise-Grade Security**: Comprehensive protection mechanisms against common vulnerabilities and attacks
 
 ## Installation
 
@@ -165,6 +166,37 @@ python client.py call acknowledge_alert alert_id="alert-id" user="admin"
 python client.py call resolve_alert alert_id="alert-id" resolution_message="Fixed the issue"
 ```
 
+### Security Protection
+
+MCP-Forge includes comprehensive security protection mechanisms:
+
+```bash
+# Generate a CSRF token for secure operations
+python client.py call get_csrf_token session_id="your-session-id"
+
+# Test the security protection mechanisms
+python test_protection.py --host localhost --port 9000 --test all
+```
+
+## Security Features
+
+MCP-Forge implements a multi-layered security approach:
+
+- **Input Validation**: Strict validation for all user inputs
+- **XSS Protection**: Content Security Policy and input sanitization
+- **CSRF Protection**: Token-based protection for state-changing operations
+- **SQL Injection Protection**: Input validation against SQL patterns
+- **Rate Limiting**: IP-based and global rate limiting
+- **DDoS Protection**: Burst detection and IP blacklisting
+- **Security Headers**: Content-Security-Policy, X-Frame-Options, etc.
+- **Server Hardening**: Directory listing prevention, content length limits
+- **Data Encryption**: Protection for sensitive data
+- **Intrusion Detection**: Pattern-based detection of suspicious activities
+- **Audit Logging**: Comprehensive security event logging
+- **Authentication**: Role-based access control
+
+For more details, see the [Security Protection documentation](docs/security_protection.md).
+
 ## Project Structure
 
 ```
@@ -180,20 +212,23 @@ mcp-forge/
 ├── status_reporter.py        # Status reporting system
 ├── metrics_collector.py      # Performance metrics collection
 ├── alerting_system.py        # Alerting system for critical issues
+├── audit_logger.py           # Security audit logging system
+├── authentication_system.py  # Authentication and authorization
+├── protection_mechanisms.py  # Security protection mechanisms
+├── request_validator.py      # Request validation and sanitization
+├── quota_manager.py          # Resource quota management
 ├── template_system/          # Template system for generating servers
 │   ├── template_manager.py   # Template loading and parsing
 │   ├── customization.py      # Customization points
 │   ├── handlers/             # Custom handler templates
 │   └── templates/            # Server templates
 ├── client.py                 # Client for interacting with servers
+├── test_protection.py        # Security testing tool
 ├── servers/                  # Generated server scripts directory
-├── logs/                     # Log files directory
-│   ├── aggregated/           # Aggregated log files
-│   ├── metrics/              # Metrics data files
-│   ├── status/               # Status report files
-│   └── alerts/               # Alert history and data
 ├── docs/                     # Documentation directory
-│   └── api_specification.md  # API specification
+│   ├── api_specification.md  # API specification
+│   ├── security_protection.md # Security documentation
+│   └── development_workflow.md # Development guidelines
 └── progress_tracker.py       # Development progress tracking utility
 ```
 
@@ -206,13 +241,21 @@ For complete API documentation, see the `docs/api_specification.md` file, which 
 - Resource monitoring capabilities
 - Configuration options
 - Auto-scaling functionality
+- Security features
 - Error handling
 
 ## Development Status
 
-MCP-Forge is in active development. See the `forge_mcp_server_plan.md` file for the current implementation status and roadmap.
+MCP-Forge development is **100% complete** with all 40 planned tasks implemented, including the comprehensive security protection mechanisms.
 
-Run `python progress_tracker.py report` to view the current development progress.
+Run `python progress_tracker.py stats` to see the overall progress:
+```
+Total Tasks: 40
+Completed: 40 (100.0%)
+In Progress: 0 (0.0%)
+Not Started: 0 (0.0%)
+Blocked: 0 (0.0%)
+```
 
 ## Requirements
 
@@ -225,6 +268,7 @@ Run `python progress_tracker.py report` to view the current development progress
 - python-dateutil 2.8.2+
 - aiosmtplib 2.0.1+ (for email notifications)
 - prometheus-client 0.17.1+ (optional, for exposing metrics)
+- jsonschema 4.17.3+ (for configuration validation)
 
 ## License
 
