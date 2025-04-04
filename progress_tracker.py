@@ -225,50 +225,86 @@ class ProgressTracker:
             return None
     
     def generate_report(self):
-        """Generate a progress report."""
+        """Generate a detailed progress report."""
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        report = [f"# MCP-Forge Progress Report", f"Generated: {now}", ""]
+        
+        # Overall progress
         stats = self.get_statistics()
+        report.append("## Overall Progress")
+        report.append(f"- Completed: {stats['completed']}/{stats['total']} tasks ({stats['percent_completed']}%)")
+        report.append(f"- In Progress: {stats['in_progress']}/{stats['total']} tasks ({stats['percent_in_progress']}%)")
+        report.append("")
         
-        report = f"# MCP-Forge Progress Report\n"
-        report += f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        # Visual progress bar
+        progress_bar_length = 50
+        completed_chars = int(progress_bar_length * stats['completed'] / stats['total'])
+        in_progress_chars = int(progress_bar_length * stats['in_progress'] / stats['total'])
+        remaining_chars = progress_bar_length - completed_chars - in_progress_chars
         
-        report += f"## Overall Progress\n"
-        report += f"- Completed: {stats['completed']}/{stats['total']} tasks ({stats['percent_completed']}%)\n"
-        report += f"- In Progress: {stats['in_progress']}/{stats['total']} tasks ({stats['percent_in_progress']}%)\n\n"
+        progress_bar = "["
+        progress_bar += "=" * completed_chars
+        progress_bar += ">" * in_progress_chars
+        progress_bar += " " * remaining_chars
+        progress_bar += "]"
         
-        report += f"## Phase Status\n"
+        report.append(f"Overall Progress: {progress_bar} {stats['percent_completed']}%")
+        report.append("")
         
-        for phase in range(1, 9):
+        # Phase-wise progress
+        report.append("## Phase Status")
+        
+        for phase in range(1, 9):  # We have 8 phases
             phase_tasks = [t for t in self.tasks if t['phase'] == phase]
             if not phase_tasks:
                 continue
                 
-            phase_completed = sum(1 for t in phase_tasks if t['status'] == 'Completed')
-            percent = round(phase_completed / len(phase_tasks) * 100, 1)
+            completed_tasks = [t for t in phase_tasks if t['status'] == 'Completed']
+            in_progress_tasks = [t for t in phase_tasks if t['status'] == 'In Progress']
             
-            report += f"### Phase {phase}\n"
-            report += f"- Progress: {phase_completed}/{len(phase_tasks)} tasks ({percent}%)\n"
+            total_phase_tasks = len(phase_tasks)
+            completed_phase_tasks = len(completed_tasks)
             
-            for task in sorted(phase_tasks, key=lambda x: x['task']):
-                status_marker = "✓" if task['status'] == 'Completed' else "→" if task['status'] == 'In Progress' else "✗" if task['status'] == 'Blocked' else "•"
-                commit_info = f" [commit:{task.get('commit_sha', 'unknown')}]" if task.get('commit_sha') else ""
-                report += f"- {status_marker} {task['task']}: {task['status']}{commit_info}\n"
+            percent_complete = round(completed_phase_tasks / total_phase_tasks * 100, 1) if total_phase_tasks > 0 else 0
             
-            report += "\n"
+            # Generate phase progress bar
+            phase_bar_length = 20
+            phase_completed_chars = int(phase_bar_length * completed_phase_tasks / total_phase_tasks) if total_phase_tasks > 0 else 0
+            phase_in_progress_chars = int(phase_bar_length * len(in_progress_tasks) / total_phase_tasks) if total_phase_tasks > 0 else 0
+            phase_remaining_chars = phase_bar_length - phase_completed_chars - phase_in_progress_chars
+            
+            phase_bar = "["
+            phase_bar += "=" * phase_completed_chars
+            phase_bar += ">" * phase_in_progress_chars
+            phase_bar += " " * phase_remaining_chars
+            phase_bar += "]"
+            
+            report.append(f"### Phase {phase}")
+            report.append(f"- Progress: {completed_phase_tasks}/{total_phase_tasks} tasks ({percent_complete}%)")
+            report.append(f"- {phase_bar} {percent_complete}%")
+            
+            for task in sorted(phase_tasks, key=lambda x: (0 if x['status'] == 'Completed' else 1, x['task'])):
+                task_status_icon = "✓" if task['status'] == 'Completed' else "→" if task['status'] == 'In Progress' else "•"
+                task_commit = f" [commit:{task.get('commit_sha', '')[:7]}]" if task.get('commit_sha') else ""
+                report.append(f"- {task_status_icon} {task['task']}: {task['status']}{task_commit}")
+            
+            report.append("")
         
-        report += f"## Recent Updates\n"
-        # Sort tasks by last_updated (if available)
+        # Recent updates
         recent_tasks = sorted(
             [t for t in self.tasks if t.get('last_updated')],
             key=lambda x: x.get('last_updated', ''),
             reverse=True
-        )
+        )[:5]
         
-        for task in recent_tasks[:5]:  # Show 5 most recent updates
-            date_str = datetime.fromisoformat(task['last_updated']).strftime('%Y-%m-%d')
-            commit_info = f" [commit:{task.get('commit_sha', '')[:7]}]" if task.get('commit_sha') else ""
-            report += f"- {date_str}: Phase {task['phase']} - {task['task']} → {task['status']}{commit_info}\n"
+        if recent_tasks:
+            report.append("## Recent Updates")
+            for task in recent_tasks:
+                task_date = datetime.fromisoformat(task['last_updated']).strftime("%Y-%m-%d")
+                task_commit = f" [commit:{task.get('commit_sha', '')[:7]}]" if task.get('commit_sha') else ""
+                report.append(f"- {task_date}: Phase {task['phase']} - {task['task']} → {task['status']}{task_commit}")
         
-        return report
+        return "\n".join(report)
 
 def main():
     """Command-line interface for the progress tracker."""
