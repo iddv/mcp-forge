@@ -1,0 +1,195 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP-Forge Authentication Configuration",
+  "description": "Schema for the MCP-Forge authentication system configuration",
+  "type": "object",
+  "properties": {
+    "users": {
+      "description": "List of registered users",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Unique identifier for the user",
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "description": "Unique username for authentication",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 50,
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "password_hash": {
+            "description": "Hashed password for the user",
+            "type": "string"
+          },
+          "role": {
+            "description": "User role for permission grouping",
+            "type": "string",
+            "enum": ["admin", "operator", "developer", "viewer", "custom"]
+          },
+          "permissions": {
+            "description": "List of permissions granted to the user",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "server:create",
+                "server:delete",
+                "server:modify",
+                "server:view",
+                "server:start",
+                "server:stop",
+                "server:restart",
+                "config:view",
+                "config:modify",
+                "logs:view",
+                "metrics:view",
+                "alerts:view",
+                "alerts:modify",
+                "admin"
+              ]
+            }
+          },
+          "enabled": {
+            "description": "Whether the user account is enabled",
+            "type": "boolean",
+            "default": true
+          },
+          "created_at": {
+            "description": "When the user account was created",
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_login": {
+            "description": "When the user last logged in",
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "api_keys": {
+            "description": "API keys associated with the user",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "description": "Unique identifier for the API key",
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "key": {
+                  "description": "The API key value",
+                  "type": "string"
+                },
+                "description": {
+                  "description": "Description of the API key's purpose",
+                  "type": "string"
+                },
+                "created_at": {
+                  "description": "When the API key was created",
+                  "type": "number"
+                },
+                "expires_at": {
+                  "description": "When the API key expires (unix timestamp)",
+                  "type": ["number", "null"]
+                },
+                "enabled": {
+                  "description": "Whether the API key is enabled",
+                  "type": "boolean",
+                  "default": true
+                }
+              },
+              "required": ["id", "key", "created_at"]
+            }
+          },
+          "metadata": {
+            "description": "Additional user metadata",
+            "type": "object"
+          }
+        },
+        "required": ["id", "username", "role", "permissions", "enabled", "created_at"]
+      }
+    },
+    "token_expiration": {
+      "description": "Token expiration time in seconds",
+      "type": "integer",
+      "minimum": 300,
+      "default": 3600
+    },
+    "auth_methods": {
+      "description": "Enabled authentication methods",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["api_key", "basic", "jwt", "oauth2", "none"]
+      },
+      "default": ["api_key", "basic"]
+    },
+    "password_policy": {
+      "description": "Password policy configuration",
+      "type": "object",
+      "properties": {
+        "min_length": {
+          "description": "Minimum password length",
+          "type": "integer",
+          "minimum": 8,
+          "default": 12
+        },
+        "require_uppercase": {
+          "description": "Require at least one uppercase character",
+          "type": "boolean",
+          "default": true
+        },
+        "require_lowercase": {
+          "description": "Require at least one lowercase character",
+          "type": "boolean",
+          "default": true
+        },
+        "require_digits": {
+          "description": "Require at least one digit",
+          "type": "boolean",
+          "default": true
+        },
+        "require_special": {
+          "description": "Require at least one special character",
+          "type": "boolean",
+          "default": true
+        },
+        "max_age_days": {
+          "description": "Maximum password age in days (0 for no expiration)",
+          "type": "integer",
+          "minimum": 0,
+          "default": 90
+        }
+      }
+    },
+    "lockout_policy": {
+      "description": "Account lockout policy",
+      "type": "object",
+      "properties": {
+        "max_attempts": {
+          "description": "Maximum failed login attempts before lockout",
+          "type": "integer",
+          "minimum": 3,
+          "default": 5
+        },
+        "lockout_duration": {
+          "description": "Lockout duration in seconds",
+          "type": "integer",
+          "minimum": 60,
+          "default": 1800
+        },
+        "reset_after": {
+          "description": "Reset failed attempt counter after this many seconds",
+          "type": "integer",
+          "minimum": 60,
+          "default": 3600
+        }
+      }
+    }
+  },
+  "required": ["users"]
+} 

@@ -1,0 +1,131 @@
+{
+  "system_quotas": {
+    "quotas": {
+      "total_servers": {
+        "resource_type": "total_servers",
+        "limit": 50,
+        "period": "total",
+        "description": "Maximum total number of servers across all users",
+        "current_value": 12,
+        "last_reset": 1712055600,
+        "is_active": true
+      },
+      "total_api_calls": {
+        "resource_type": "total_api_calls",
+        "limit": 10000,
+        "period": "hourly",
+        "description": "Maximum API calls per hour for the entire system",
+        "current_value": 548,
+        "last_reset": 1712070000,
+        "is_active": true
+      },
+      "total_memory": {
+        "resource_type": "total_memory",
+        "limit": 8192,
+        "period": "total",
+        "description": "Maximum total memory in MB across all servers",
+        "current_value": 2048,
+        "last_reset": 1712055600,
+        "is_active": true
+      }
+    }
+  },
+  "user_quotas": [
+    {
+      "username": "admin",
+      "quotas": {
+        "servers": {
+          "resource_type": "servers",
+          "limit": 20,
+          "period": "total",
+          "description": "Maximum of 20 servers for admin user",
+          "current_value": 5,
+          "last_reset": 1712055600,
+          "is_active": true
+        },
+        "api_calls": {
+          "resource_type": "api_calls",
+          "limit": 5000,
+          "period": "hourly",
+          "description": "Maximum of 5000 API calls per hour for admin user",
+          "current_value": 120,
+          "last_reset": 1712070000,
+          "is_active": true
+        },
+        "memory": {
+          "resource_type": "memory",
+          "limit": 4096,
+          "period": "total",
+          "description": "Maximum of 4GB memory allocation for admin user",
+          "current_value": 1024,
+          "last_reset": 1712055600,
+          "is_active": true
+        }
+      }
+    },
+    {
+      "username": "developer",
+      "quotas": {
+        "servers": {
+          "resource_type": "servers",
+          "limit": 10,
+          "period": "total",
+          "description": "Maximum of 10 servers for developer user",
+          "current_value": 4,
+          "last_reset": 1712055600,
+          "is_active": true
+        },
+        "api_calls": {
+          "resource_type": "api_calls",
+          "limit": 2000,
+          "period": "hourly",
+          "description": "Maximum of 2000 API calls per hour for developer user",
+          "current_value": 83,
+          "last_reset": 1712070000,
+          "is_active": true
+        },
+        "memory": {
+          "resource_type": "memory",
+          "limit": 2048,
+          "period": "total",
+          "description": "Maximum of 2GB memory allocation for developer user",
+          "current_value": 512,
+          "last_reset": 1712055600,
+          "is_active": true
+        }
+      }
+    },
+    {
+      "username": "viewer",
+      "quotas": {
+        "servers": {
+          "resource_type": "servers",
+          "limit": 2,
+          "period": "total",
+          "description": "Maximum of 2 servers for viewer user",
+          "current_value": 1,
+          "last_reset": 1712055600,
+          "is_active": true
+        },
+        "api_calls": {
+          "resource_type": "api_calls",
+          "limit": 1000,
+          "period": "hourly",
+          "description": "Maximum of 1000 API calls per hour for viewer user",
+          "current_value": 45,
+          "last_reset": 1712070000,
+          "is_active": true
+        },
+        "memory": {
+          "resource_type": "memory",
+          "limit": 512,
+          "period": "total",
+          "description": "Maximum of 512MB memory allocation for viewer user",
+          "current_value": 256,
+          "last_reset": 1712055600,
+          "is_active": true
+        }
+      }
+    }
+  ]
+} 

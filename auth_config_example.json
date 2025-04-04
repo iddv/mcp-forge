@@ -1,0 +1,122 @@
+{
+  "users": [
+    {
+      "id": "d8f3b61e-5c8a-4b1d-9c5d-8e7f6a9b0c3d",
+      "username": "admin",
+      "password_hash": "base64_encoded_password_hash_here",
+      "role": "admin",
+      "permissions": [
+        "admin"
+      ],
+      "enabled": true,
+      "created_at": "2025-04-01T12:00:00.000Z",
+      "last_login": "2025-04-04T14:30:00.000Z",
+      "api_keys": [
+        {
+          "id": "a1b2c3d4-e5f6-7890-a1b2-c3d4e5f67890",
+          "key": "mcp_exampleAPIkey1234567890abcdefghijklmnopqrstuv",
+          "description": "Admin console access",
+          "created_at": 1712055600,
+          "expires_at": null,
+          "enabled": true
+        }
+      ],
+      "metadata": {
+        "full_name": "System Administrator",
+        "email": "admin@example.com"
+      }
+    },
+    {
+      "id": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+      "username": "operator",
+      "password_hash": "base64_encoded_password_hash_here",
+      "role": "operator",
+      "permissions": [
+        "server:view",
+        "server:start",
+        "server:stop",
+        "server:restart",
+        "logs:view",
+        "metrics:view",
+        "alerts:view",
+        "alerts:modify"
+      ],
+      "enabled": true,
+      "created_at": "2025-04-01T12:30:00.000Z",
+      "last_login": "2025-04-03T16:45:00.000Z",
+      "api_keys": [],
+      "metadata": {
+        "full_name": "Operations Manager",
+        "email": "ops@example.com"
+      }
+    },
+    {
+      "id": "1a2b3c4d-5e6f-7890-1a2b-3c4d5e6f7890",
+      "username": "developer",
+      "password_hash": "base64_encoded_password_hash_here",
+      "role": "developer",
+      "permissions": [
+        "server:view",
+        "server:create",
+        "server:modify",
+        "logs:view",
+        "metrics:view"
+      ],
+      "enabled": true,
+      "created_at": "2025-04-01T13:00:00.000Z",
+      "last_login": "2025-04-04T09:15:00.000Z",
+      "api_keys": [
+        {
+          "id": "b2c3d4e5-f6a7-8901-b2c3-d4e5f6a78901",
+          "key": "mcp_devAPIkey1234567890abcdefghijklmnopqrstuvwxyzABCD",
+          "description": "CI/CD pipeline integration",
+          "created_at": 1712059200,
+          "expires_at": 1743595200,
+          "enabled": true
+        }
+      ],
+      "metadata": {
+        "full_name": "Development Lead",
+        "team": "Server Team"
+      }
+    },
+    {
+      "id": "2b3c4d5e-6f7a-8901-2b3c-4d5e6f7a8901",
+      "username": "viewer",
+      "password_hash": "base64_encoded_password_hash_here",
+      "role": "viewer",
+      "permissions": [
+        "server:view",
+        "logs:view",
+        "metrics:view",
+        "alerts:view"
+      ],
+      "enabled": true,
+      "created_at": "2025-04-01T13:30:00.000Z",
+      "last_login": "2025-04-02T10:45:00.000Z",
+      "api_keys": [],
+      "metadata": {
+        "full_name": "Monitoring User",
+        "department": "Support"
+      }
+    }
+  ],
+  "token_expiration": 7200,
+  "auth_methods": [
+    "api_key",
+    "basic"
+  ],
+  "password_policy": {
+    "min_length": 12,
+    "require_uppercase": true,
+    "require_lowercase": true,
+    "require_digits": true,
+    "require_special": true,
+    "max_age_days": 90
+  },
+  "lockout_policy": {
+    "max_attempts": 5,
+    "lockout_duration": 1800,
+    "reset_after": 3600
+  }
+} 

@@ -16,6 +16,41 @@ from typing import Dict, Any, Optional, List
 import mcp
 from mcp import ClientSession
 
+# Store authentication token in memory
+auth_token = None
+auth_token_file = os.path.expanduser("~/.mcp_forge_token")
+
+# Authentication helper functions
+def save_token(token: str) -> None:
+    """Save authentication token to file."""
+    try:
+        with open(auth_token_file, 'w') as f:
+            f.write(token)
+    except Exception as e:
+        print(f"Warning: Could not save authentication token: {e}")
+
+def load_token() -> Optional[str]:
+    """Load authentication token from file."""
+    if os.path.exists(auth_token_file):
+        try:
+            with open(auth_token_file, 'r') as f:
+                return f.read().strip()
+        except Exception as e:
+            print(f"Warning: Could not load authentication token: {e}")
+    return None
+
+def get_auth_header():
+    """Get Authorization header with the current token."""
+    global auth_token
+    
+    # Try to load token if not in memory
+    if not auth_token:
+        auth_token = load_token()
+    
+    if auth_token:
+        return {"Authorization": f"Bearer {auth_token}"}
+    return {}
+
 async def connect_to_server(host: str, port: int) -> ClientSession:
     """
     Connect to an MCP server.
@@ -128,6 +163,9 @@ async def meta_server_commands():
     try:
         print(f"Connecting to MCP-Forge Server on port {forge_port}...")
         client = await connect_to_server("localhost", forge_port)
+        
+        # Add authentication header if available
+        client.default_headers = get_auth_header()
     except Exception as e:
         print(f"Error connecting to forge server: {e}")
         print(f"Make sure the forge server is running on localhost:{forge_port}")
@@ -151,8 +189,219 @@ async def meta_server_commands():
             print(f"  Status: {server['status']}")
             print(f"  Port: {server['port']}")
             print(f"  Description: {server.get('description', 'No description')}")
+        
+        # Show authentication status
+        if servers.get("authenticated") is True:
+            print("\nAuthentication: Authenticated with full access")
+        else:
+            print("\nAuthentication: Limited access (unauthenticated or insufficient permissions)")
     else:
         print("No servers found.")
+    
+    return 0
+
+async def auth_commands(args):
+    """Run authentication commands."""
+    forge_port = int(os.environ.get("FORGE_MCP_PORT", "9000"))
+    
+    try:
+        print(f"Connecting to MCP-Forge Server on port {forge_port}...")
+        client = await connect_to_server("localhost", forge_port)
+    except Exception as e:
+        print(f"Error connecting to forge server: {e}")
+        print(f"Make sure the forge server is running on localhost:{forge_port}")
+        print("You can start it with: python3 forge_mcp_server.py --port 9000")
+        return 1
+    
+    if args.auth_command == "login":
+        # Login with username and password
+        if not args.username:
+            args.username = input("Username: ")
+        if not args.password:
+            import getpass
+            args.password = getpass.getpass("Password: ")
+        
+        result = await call_tool(client, "login", username=args.username, password=args.password)
+        
+        if result.get("status") == "success":
+            global auth_token
+            auth_token = result.get("token")
+            save_token(auth_token)
+            print("Login successful!")
+        else:
+            print(f"Login failed: {result.get('error', 'Unknown error')}")
+            return 1
+    
+    elif args.auth_command == "logout":
+        token = auth_token or load_token()
+        if not token:
+            print("You are not logged in.")
+            return 1
+        
+        # Add Authorization header to logout request
+        client.default_headers = get_auth_header()
+        result = await call_tool(client, "logout", token=token)
+        
+        if result.get("status") == "success":
+            # Clear token
+            global auth_token
+            auth_token = None
+            if os.path.exists(auth_token_file):
+                os.remove(auth_token_file)
+            print("Logged out successfully!")
+        else:
+            print(f"Logout failed: {result.get('error', 'Unknown error')}")
+            return 1
+    
+    elif args.auth_command == "create-api-key":
+        token = auth_token or load_token()
+        if not token:
+            print("You are not logged in. Please login first.")
+            return 1
+        
+        description = args.description or input("API key description: ")
+        
+        # Add Authorization header to create-api-key request
+        client.default_headers = get_auth_header()
+        result = await call_tool(client, "create_api_key", description=description)
+        
+        if result.get("status") == "success":
+            print("\nAPI key created successfully!")
+            print(f"Key: {result.get('api_key')}")
+            print("IMPORTANT: Store this key securely. It will not be shown again.")
+            print(f"Key ID: {result.get('key_data', {}).get('id')}")
+            print(f"Description: {description}")
+        else:
+            print(f"Failed to create API key: {result.get('error', 'Unknown error')}")
+            return 1
+    
+    elif args.auth_command == "list-api-keys":
+        token = auth_token or load_token()
+        if not token:
+            print("You are not logged in. Please login first.")
+            return 1
+        
+        # Add Authorization header to list-api-keys request
+        client.default_headers = get_auth_header()
+        result = await call_tool(client, "list_api_keys")
+        
+        if result.get("status") == "success":
+            keys = result.get("api_keys", [])
+            if not keys:
+                print("No API keys found.")
+            else:
+                print(f"\nFound {len(keys)} API key(s):")
+                for key in keys:
+                    print(f"\nID: {key.get('id')}")
+                    print(f"Key: {key.get('key')}")
+                    print(f"Description: {key.get('description', 'No description')}")
+                    print(f"Created: {time.ctime(key.get('created_at'))}")
+                    if key.get('expires_at'):
+                        print(f"Expires: {time.ctime(key.get('expires_at'))}")
+                    else:
+                        print("Expires: Never")
+                    print(f"Enabled: {key.get('enabled', True)}")
+        else:
+            print(f"Failed to list API keys: {result.get('error', 'Unknown error')}")
+            return 1
+    
+    elif args.auth_command == "revoke-api-key":
+        token = auth_token or load_token()
+        if not token:
+            print("You are not logged in. Please login first.")
+            return 1
+        
+        if not args.key_id:
+            args.key_id = input("API Key ID to revoke: ")
+        
+        # Add Authorization header to revoke-api-key request
+        client.default_headers = get_auth_header()
+        result = await call_tool(client, "revoke_api_key", key_id=args.key_id)
+        
+        if result.get("status") == "success":
+            print(f"API key {args.key_id} revoked successfully!")
+        else:
+            print(f"Failed to revoke API key: {result.get('error', 'Unknown error')}")
+            return 1
+    
+    elif args.auth_command == "create-user":
+        token = auth_token or load_token()
+        if not token:
+            print("You are not logged in. Please login first.")
+            return 1
+        
+        if not args.username:
+            args.username = input("New username: ")
+        if not args.password:
+            import getpass
+            args.password = getpass.getpass("New password: ")
+            confirm_password = getpass.getpass("Confirm password: ")
+            if args.password != confirm_password:
+                print("Passwords do not match!")
+                return 1
+                
+        if not args.role:
+            args.role = input("Role (admin, operator, developer, viewer): ")
+        
+        # Add Authorization header to create-user request
+        client.default_headers = get_auth_header()
+        
+        # Build optional parameters
+        kwargs = {
+            "username": args.username,
+            "password": args.password,
+            "role": args.role
+        }
+        
+        if args.full_name:
+            kwargs["full_name"] = args.full_name
+        
+        if args.email:
+            kwargs["email"] = args.email
+        
+        result = await call_tool(client, "create_user", **kwargs)
+        
+        if result.get("status") == "success":
+            print(f"User {args.username} created successfully with role {args.role}!")
+        else:
+            print(f"Failed to create user: {result.get('error', 'Unknown error')}")
+            return 1
+    
+    elif args.auth_command == "list-users":
+        token = auth_token or load_token()
+        if not token:
+            print("You are not logged in. Please login first.")
+            return 1
+        
+        # Add Authorization header to list-users request
+        client.default_headers = get_auth_header()
+        result = await call_tool(client, "list_users")
+        
+        if result.get("status") == "success":
+            users = result.get("users", [])
+            if not users:
+                print("No users found.")
+            else:
+                print(f"\nFound {len(users)} user(s):")
+                for user in users:
+                    print(f"\nUsername: {user.get('username')}")
+                    print(f"ID: {user.get('id')}")
+                    print(f"Role: {user.get('role')}")
+                    print(f"Enabled: {user.get('enabled', True)}")
+                    print(f"Created: {user.get('created_at')}")
+                    if user.get('last_login'):
+                        print(f"Last login: {user.get('last_login')}")
+                    else:
+                        print("Last login: Never")
+                    
+                    metadata = user.get('metadata', {})
+                    if metadata:
+                        print("Metadata:")
+                        for key, value in metadata.items():
+                            print(f"  {key}: {value}")
+        else:
+            print(f"Failed to list users: {result.get('error', 'Unknown error')}")
+            return 1
     
     return 0
 
@@ -165,6 +414,9 @@ async def run_command(args):
     try:
         print(f"Connecting to MCP server on port {args.port}...")
         client = await connect_to_server(args.host, args.port)
+        
+        # Add authentication header if available
+        client.default_headers = get_auth_header()
     except Exception as e:
         print(f"Error connecting to server: {e}")
         print(f"Make sure the server is running on {args.host}:{args.port}")
@@ -396,6 +648,40 @@ def main():
     # Prompts command
     subparsers.add_parser("prompts", help="List available prompts")
     
+    # Authentication commands
+    auth_parser = subparsers.add_parser("auth", help="Authentication commands")
+    auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="Authentication command to execute")
+    
+    # Login command
+    login_parser = auth_subparsers.add_parser("login", help="Login to the server")
+    login_parser.add_argument("--username", "-u", help="Username")
+    login_parser.add_argument("--password", "-p", help="Password")
+    
+    # Logout command
+    auth_subparsers.add_parser("logout", help="Logout from the server")
+    
+    # Create API key command
+    create_api_key_parser = auth_subparsers.add_parser("create-api-key", help="Create a new API key")
+    create_api_key_parser.add_argument("--description", "-d", help="API key description")
+    
+    # List API keys command
+    auth_subparsers.add_parser("list-api-keys", help="List API keys")
+    
+    # Revoke API key command
+    revoke_api_key_parser = auth_subparsers.add_parser("revoke-api-key", help="Revoke an API key")
+    revoke_api_key_parser.add_argument("--key-id", "-k", dest="key_id", help="API key ID to revoke")
+    
+    # Create user command
+    create_user_parser = auth_subparsers.add_parser("create-user", help="Create a new user (admin only)")
+    create_user_parser.add_argument("--username", "-u", help="Username")
+    create_user_parser.add_argument("--password", "-p", help="Password")
+    create_user_parser.add_argument("--role", "-r", help="Role (admin, operator, developer, viewer)")
+    create_user_parser.add_argument("--full-name", "-n", dest="full_name", help="Full name")
+    create_user_parser.add_argument("--email", "-e", help="Email address")
+    
+    # List users command
+    auth_subparsers.add_parser("list-users", help="List users (admin only)")
+    
     # Call command
     call_parser = subparsers.add_parser("call", help="Call a tool")
     call_parser.add_argument("tool_name", help="Name of the tool to call")
@@ -458,7 +744,14 @@ def main():
         return 1
     
     import asyncio
-    return asyncio.run(run_command(args))
+    
+    if args.command == "auth":
+        if not args.auth_command:
+            auth_parser.print_help()
+            return 1
+        return asyncio.run(auth_commands(args))
+    else:
+        return asyncio.run(run_command(args))
 
 if __name__ == "__main__":
     sys.exit(main()) 

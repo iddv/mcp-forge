@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP-Forge Quota Configuration",
+  "description": "Schema for the MCP-Forge quota management system configuration",
+  "type": "object",
+  "properties": {
+    "system_quotas": {
+      "description": "System-wide quotas that apply globally",
+      "type": "object",
+      "properties": {
+        "quotas": {
+          "description": "Map of resource types to quota definitions",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/resourceQuota"
+          }
+        }
+      },
+      "required": ["quotas"]
+    },
+    "user_quotas": {
+      "description": "List of per-user quota configurations",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "description": "Username of the user this quota applies to",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 50
+          },
+          "quotas": {
+            "description": "Map of resource types to quota definitions",
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/definitions/resourceQuota"
+            }
+          }
+        },
+        "required": ["username", "quotas"]
+      }
+    }
+  },
+  "required": ["system_quotas", "user_quotas"],
+  "definitions": {
+    "resourceQuota": {
+      "type": "object",
+      "properties": {
+        "resource_type": {
+          "description": "Type of resource being limited",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Maximum allowed value",
+          "type": "number",
+          "minimum": 0
+        },
+        "period": {
+          "description": "Time period for the limit",
+          "type": "string",
+          "enum": ["hourly", "daily", "monthly", "total"]
+        },
+        "description": {
+          "description": "Description of the quota",
+          "type": "string"
+        },
+        "current_value": {
+          "description": "Current usage count",
+          "type": "number",
+          "minimum": 0,
+          "default": 0
+        },
+        "last_reset": {
+          "description": "Timestamp of last reset",
+          "type": "number",
+          "default": 0
+        },
+        "is_active": {
+          "description": "Whether the quota is active",
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": ["resource_type", "limit", "period"]
+    }
+  }
+} 

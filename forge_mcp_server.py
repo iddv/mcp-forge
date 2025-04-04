@@ -37,6 +37,8 @@ from log_aggregator import initialize_log_aggregator, start_aggregation_service
 from status_reporter import get_status_reporter, start_status_reporting
 from metrics_collector import get_metrics_collector, start_metrics_collection
 from alerting_system import get_alerting_system, start_alerting_service
+from authentication_system import AuthenticationSystem, Permission, authentication_middleware
+from audit_logger import get_audit_logger, AuditEventType, AuditSeverity, log_auth_success, log_auth_failure, log_server_create, log_server_delete, log_permission_denied
 
 # Setup logging
 logging.basicConfig(
@@ -205,6 +207,72 @@ def create_server(name: Optional[str] = None, description: str = "MCP Server",
     Returns:
         Information about the created server.
     """
+    # Check authentication
+    auth_header = mcp_server.current_request.headers.get("Authorization", "")
+    client_ip = mcp_server.current_request.client_info.host
+    
+    # Extract username for audit logging
+    username = None
+    if auth_header:
+        token = None
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+        elif auth_header.startswith("ApiKey "):
+            api_key = auth_header[7:].strip()
+            token = auth_system.authenticate_api_key(api_key)
+        
+        if token:
+            username = auth_system.validate_token(token)
+    
+    if not auth_header:
+        # Log permission denied for unauthenticated access
+        log_permission_denied(username=None, client_ip=client_ip, 
+                            details={"action": "create_server", 
+                                    "reason": "Authentication required"})
+        
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Authentication required to create servers"
+        }
+    
+    # Extract token or API key
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif auth_header.startswith("ApiKey "):
+        api_key = auth_header[7:].strip()
+        token = auth_system.authenticate_api_key(api_key)
+    
+    # Validate token
+    if not token or not auth_system.validate_token(token):
+        # Log permission denied for invalid token
+        log_permission_denied(username=username, client_ip=client_ip, 
+                            details={"action": "create_server", 
+                                    "reason": "Invalid authentication token"})
+        
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Invalid authentication token"
+        }
+    
+    # Get username for audit logging
+    username = auth_system.validate_token(token)
+    
+    # Check permission
+    if not auth_system.check_permission(token, Permission.SERVER_CREATE):
+        # Log permission denied
+        log_permission_denied(username=username, client_ip=client_ip, 
+                            details={"action": "create_server", 
+                                    "permission": Permission.SERVER_CREATE.value})
+        
+        return {
+            "status": "error",
+            "code": 403,
+            "error": "Permission denied: server:create permission required"
+        }
+    
     global next_port
     
     # Validate request parameters
@@ -213,6 +281,21 @@ def create_server(name: Optional[str] = None, description: str = "MCP Server",
     )
     
     if not is_valid:
+        # Log validation failure
+        get_audit_logger().log_security_event(
+            AuditEventType.SEC_INPUT_VALIDATION,
+            username=username, 
+            client_ip=client_ip,
+            details={"action": "create_server", "error": error_msg, 
+                    "request_params": {
+                        "name": name,
+                        "description": description,
+                        "capabilities": capabilities,
+                        "handlers": handlers,
+                        "options": str(options)
+                    }}
+        )
+        
         return {
             "status": "error",
             "error": f"Invalid request: {error_msg}"
@@ -263,6 +346,22 @@ def create_server(name: Optional[str] = None, description: str = "MCP Server",
         )
         
         if not success:
+            # Log server creation failure
+            get_audit_logger().log_server_action(
+                AuditEventType.SERVER_CREATE, 
+                username=username,
+                client_ip=client_ip,
+                server_id=server_id,
+                details={
+                    "name": name or server_id,
+                    "description": description,
+                    "capabilities": capabilities,
+                    "handlers": handlers,
+                    "error": error
+                },
+                success=False
+            )
+            
             return {
                 "status": "error",
                 "error": error
@@ -272,6 +371,20 @@ def create_server(name: Optional[str] = None, description: str = "MCP Server",
         next_port = server_manager.next_port
         
         logger.info(f"Created server instance: {server_id}")
+        
+        # Log successful server creation
+        log_server_create(
+            username=username,
+            client_ip=client_ip,
+            server_id=server_id,
+            details={
+                "name": name or server_id,
+                "description": description,
+                "capabilities": capabilities,
+                "handlers": handlers,
+                "options": str(options)
+            }
+        )
         
         # Start the server automatically
         if not server.start():
@@ -290,6 +403,21 @@ def create_server(name: Optional[str] = None, description: str = "MCP Server",
     except Exception as e:
         error_msg = f"Error creating server: {str(e)}"
         logger.error(error_msg)
+        
+        # Log server creation error
+        get_audit_logger().log_server_action(
+            AuditEventType.SERVER_CREATE, 
+            username=username,
+            client_ip=client_ip,
+            server_id=server_id if 'server_id' in locals() else "unknown",
+            details={
+                "name": name,
+                "description": description,
+                "error": str(e)
+            },
+            success=False
+        )
+        
         return {"status": "error", "error": error_msg}
 
 @mcp_server.tool()
@@ -303,6 +431,39 @@ def start_server(server_id: str) -> Dict[str, Any]:
     Returns:
         Status of the operation.
     """
+    # Check authentication
+    auth_header = mcp_server.current_request.headers.get("Authorization", "")
+    if not auth_header:
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Authentication required to start servers"
+        }
+    
+    # Extract token or API key
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif auth_header.startswith("ApiKey "):
+        api_key = auth_header[7:].strip()
+        token = auth_system.authenticate_api_key(api_key)
+    
+    # Validate token
+    if not token or not auth_system.validate_token(token):
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Invalid authentication token"
+        }
+    
+    # Check permission
+    if not auth_system.check_permission(token, Permission.SERVER_START):
+        return {
+            "status": "error",
+            "code": 403,
+            "error": "Permission denied: server:start permission required"
+        }
+    
     server = server_manager.get_instance(server_id)
     if not server:
         return {
@@ -338,6 +499,39 @@ def stop_server(server_id: str) -> Dict[str, Any]:
     Returns:
         Status of the operation.
     """
+    # Check authentication
+    auth_header = mcp_server.current_request.headers.get("Authorization", "")
+    if not auth_header:
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Authentication required to stop servers"
+        }
+    
+    # Extract token or API key
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif auth_header.startswith("ApiKey "):
+        api_key = auth_header[7:].strip()
+        token = auth_system.authenticate_api_key(api_key)
+    
+    # Validate token
+    if not token or not auth_system.validate_token(token):
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Invalid authentication token"
+        }
+    
+    # Check permission
+    if not auth_system.check_permission(token, Permission.SERVER_STOP):
+        return {
+            "status": "error",
+            "code": 403,
+            "error": "Permission denied: server:stop permission required"
+        }
+    
     server = server_manager.get_instance(server_id)
     if not server:
         return {
@@ -345,17 +539,22 @@ def stop_server(server_id: str) -> Dict[str, Any]:
             "error": f"Server not found: {server_id}"
         }
     
-    if server.status != "running":
+    if server.status == "stopped":
         return {
             "status": "warning",
-            "message": f"Server {server_id} is not running"
+            "message": f"Server {server_id} is already stopped"
         }
     
-    server.stop()
-    return {
-        "status": "success",
-        "message": f"Server {server_id} stopped successfully"
-    }
+    if server.stop():
+        return {
+            "status": "success",
+            "message": f"Server {server_id} stopped successfully"
+        }
+    else:
+        return {
+            "status": "error",
+            "error": server.error
+        }
 
 @mcp_server.tool()
 def delete_server(server_id: str) -> Dict[str, Any]:
@@ -368,23 +567,122 @@ def delete_server(server_id: str) -> Dict[str, Any]:
     Returns:
         Status of the operation.
     """
+    # Check authentication
+    auth_header = mcp_server.current_request.headers.get("Authorization", "")
+    client_ip = mcp_server.current_request.client_info.host
+    
+    # Extract username for audit logging
+    username = None
+    if auth_header:
+        token = None
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+        elif auth_header.startswith("ApiKey "):
+            api_key = auth_header[7:].strip()
+            token = auth_system.authenticate_api_key(api_key)
+        
+        if token:
+            username = auth_system.validate_token(token)
+    
+    if not auth_header:
+        # Log permission denied for unauthenticated access
+        log_permission_denied(username=None, client_ip=client_ip, 
+                            details={"action": "delete_server", 
+                                    "server_id": server_id,
+                                    "reason": "Authentication required"})
+        
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Authentication required to delete servers"
+        }
+    
+    # Extract token or API key
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif auth_header.startswith("ApiKey "):
+        api_key = auth_header[7:].strip()
+        token = auth_system.authenticate_api_key(api_key)
+    
+    # Validate token
+    if not token or not auth_system.validate_token(token):
+        # Log permission denied for invalid token
+        log_permission_denied(username=username, client_ip=client_ip, 
+                            details={"action": "delete_server", 
+                                    "server_id": server_id,
+                                    "reason": "Invalid authentication token"})
+        
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Invalid authentication token"
+        }
+    
+    # Get username for audit logging
+    username = auth_system.validate_token(token)
+    
+    # Check permission
+    if not auth_system.check_permission(token, Permission.SERVER_DELETE):
+        # Log permission denied
+        log_permission_denied(username=username, client_ip=client_ip, 
+                            details={"action": "delete_server", 
+                                    "server_id": server_id,
+                                    "permission": Permission.SERVER_DELETE.value})
+        
+        return {
+            "status": "error",
+            "code": 403,
+            "error": "Permission denied: server:delete permission required"
+        }
+    
     server = server_manager.get_instance(server_id)
     if not server:
+        # Log server not found
+        get_audit_logger().log_server_action(
+            AuditEventType.SERVER_DELETE, 
+            username=username,
+            client_ip=client_ip,
+            server_id=server_id,
+            details={"error": f"Server not found: {server_id}"},
+            success=False
+        )
+        
         return {
             "status": "error",
             "error": f"Server not found: {server_id}"
         }
     
-    success = server_manager.delete_instance(server_id)
-    if success:
+    # Remember server info for logging
+    server_info = server.get_info()
+    
+    if server_manager.delete_instance(server_id):
+        # Log successful deletion
+        log_server_delete(
+            username=username,
+            client_ip=client_ip,
+            server_id=server_id,
+            details=server_info
+        )
+        
         return {
             "status": "success",
             "message": f"Server {server_id} deleted successfully"
         }
     else:
+        # Log failed deletion
+        get_audit_logger().log_server_action(
+            AuditEventType.SERVER_DELETE, 
+            username=username,
+            client_ip=client_ip,
+            server_id=server_id,
+            details={"error": "Failed to delete server instance"},
+            success=False
+        )
+        
         return {
             "status": "error",
-            "error": f"Error deleting server {server_id}"
+            "error": "Failed to delete server instance"
         }
 
 @mcp_server.tool()
@@ -440,12 +738,29 @@ def list_servers(include_details: bool = False) -> Dict[str, Any]:
     Returns:
         List of servers.
     """
+    # Check authentication (view permission is required)
+    auth_header = mcp_server.current_request.headers.get("Authorization", "")
+    
+    # For server listing, we'll allow unauthenticated access but limit the details
+    authenticated = False
+    if auth_header:
+        token = None
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+        elif auth_header.startswith("ApiKey "):
+            api_key = auth_header[7:].strip()
+            token = auth_system.authenticate_api_key(api_key)
+        
+        if token and auth_system.validate_token(token):
+            authenticated = auth_system.check_permission(token, Permission.SERVER_VIEW)
+    
     servers_list = []
     
     for server_id, server in server_manager.get_all_instances().items():
-        if include_details:
+        if authenticated and include_details:
             servers_list.append(server.get_info())
         else:
+            # Limited information for unauthenticated users
             servers_list.append({
                 "id": server.id,
                 "name": server.name,
@@ -457,7 +772,8 @@ def list_servers(include_details: bool = False) -> Dict[str, Any]:
     return {
         "status": "success",
         "count": len(servers_list),
-        "servers": servers_list
+        "servers": servers_list,
+        "authenticated": authenticated
     }
 
 @mcp_server.tool()
@@ -1612,6 +1928,320 @@ def get_alerts(active_only: bool = True, limit: int = 100) -> Dict[str, Any]:
             "message": str(e)
         }
 
+# Authentication-related tools
+@mcp_server.tool()
+def login(username: str, password: str) -> Dict[str, Any]:
+    """
+    Authenticate and get a session token.
+    
+    Args:
+        username: Username for authentication
+        password: Password for authentication
+        
+    Returns:
+        Authentication result with token if successful
+    """
+    # Get client IP address
+    client_ip = mcp_server.current_request.client_info.host
+    
+    token = auth_system.authenticate_basic(username, password)
+    
+    if token:
+        # Log successful authentication
+        log_auth_success(username, client_ip, details={
+            "method": "basic",
+            "client_agent": mcp_server.current_request.headers.get("User-Agent", "Unknown")
+        })
+        
+        return {
+            "status": "success",
+            "token": token,
+            "message": "Authentication successful"
+        }
+    else:
+        # Log failed authentication
+        log_auth_failure(username, client_ip, details={
+            "method": "basic",
+            "client_agent": mcp_server.current_request.headers.get("User-Agent", "Unknown")
+        })
+        
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Invalid username or password"
+        }
+
+@mcp_server.tool()
+def logout(token: str) -> Dict[str, Any]:
+    """
+    Invalidate a session token.
+    
+    Args:
+        token: Session token to invalidate
+        
+    Returns:
+        Status of the operation
+    """
+    # Get client IP address
+    client_ip = mcp_server.current_request.client_info.host
+    
+    # Get username from token before invalidating
+    username = None
+    for t, data in auth_system.tokens.items():
+        if t == token:
+            username = data.get("username")
+            break
+    
+    if auth_system.invalidate_token(token):
+        # Log successful logout
+        if username:
+            get_audit_logger().log_event(
+                event_type=AuditEventType.AUTH_LOGOUT,
+                username=username,
+                client_ip=client_ip,
+                details={
+                    "client_agent": mcp_server.current_request.headers.get("User-Agent", "Unknown")
+                },
+                severity=AuditSeverity.INFO,
+                success=True
+            )
+        
+        return {
+            "status": "success",
+            "message": "Logged out successfully"
+        }
+    else:
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Invalid token"
+        }
+
+@mcp_server.tool()
+def list_users() -> Dict[str, Any]:
+    """
+    List all users.
+    
+    Returns:
+        List of users
+    """
+    # Check authentication
+    auth_header = mcp_server.current_request.headers.get("Authorization", "")
+    if not auth_header:
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Authentication required"
+        }
+    
+    # Extract token
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    
+    # Validate token
+    username = auth_system.validate_token(token) if token else None
+    if not username:
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Invalid authentication token"
+        }
+    
+    # Check if user has admin permission
+    if not auth_system.has_permission(username, Permission.ADMIN):
+        return {
+            "status": "error",
+            "code": 403,
+            "error": "Permission denied: Admin permission required"
+        }
+    
+    try:
+        users = auth_system.list_users()
+        return {
+            "status": "success",
+            "count": len(users),
+            "users": users
+        }
+    except Exception as e:
+        logger.error(f"Error listing users: {e}")
+        return {
+            "status": "error",
+            "error": f"Error listing users: {str(e)}"
+        }
+
+@mcp_server.tool()
+def update_user(target_username: str, 
+                password: Optional[str] = None,
+                role: Optional[str] = None,
+                enabled: Optional[bool] = None,
+                metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Update a user.
+    
+    Args:
+        target_username: Username of the user to update
+        password: Optional new password
+        role: Optional new role
+        enabled: Optional enabled/disabled status
+        metadata: Optional metadata to update
+        
+    Returns:
+        Status of the operation
+    """
+    # Check authentication
+    auth_header = mcp_server.current_request.headers.get("Authorization", "")
+    if not auth_header:
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Authentication required"
+        }
+    
+    # Extract token
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    
+    # Validate token
+    username = auth_system.validate_token(token) if token else None
+    if not username:
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Invalid authentication token"
+        }
+    
+    # Self-update or admin update?
+    is_self_update = username == target_username
+    
+    # For updating other users, admin permission is required
+    if not is_self_update and not auth_system.has_permission(username, Permission.ADMIN):
+        return {
+            "status": "error",
+            "code": 403,
+            "error": "Permission denied: Admin permission required to update other users"
+        }
+    
+    # For self-update, only password and metadata can be changed
+    if is_self_update and (role is not None or enabled is not None):
+        return {
+            "status": "error",
+            "code": 403,
+            "error": "Permission denied: Cannot change own role or enabled status"
+        }
+    
+    try:
+        # Validate role if provided
+        role_enum = None
+        if role is not None:
+            try:
+                from authentication_system import Role
+                role_enum = Role(role)
+            except ValueError:
+                return {
+                    "status": "error",
+                    "error": f"Invalid role: {role}. Must be one of: admin, operator, developer, viewer, custom"
+                }
+        
+        # Update user
+        user = auth_system.update_user(
+            username=target_username,
+            password=password,
+            role=role_enum,
+            enabled=enabled,
+            metadata=metadata
+        )
+        
+        return {
+            "status": "success",
+            "message": f"User {target_username} updated successfully",
+            "user": user.to_dict(include_sensitive=False)
+        }
+    except ValueError as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+    except Exception as e:
+        logger.error(f"Error updating user: {e}")
+        return {
+            "status": "error",
+            "error": f"Error updating user: {str(e)}"
+        }
+
+@mcp_server.tool()
+def delete_user(target_username: str) -> Dict[str, Any]:
+    """
+    Delete a user.
+    
+    Args:
+        target_username: Username of the user to delete
+        
+    Returns:
+        Status of the operation
+    """
+    # Check authentication
+    auth_header = mcp_server.current_request.headers.get("Authorization", "")
+    if not auth_header:
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Authentication required"
+        }
+    
+    # Extract token
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    
+    # Validate token
+    username = auth_system.validate_token(token) if token else None
+    if not username:
+        return {
+            "status": "error",
+            "code": 401,
+            "error": "Invalid authentication token"
+        }
+    
+    # Cannot delete self
+    if username == target_username:
+        return {
+            "status": "error",
+            "error": "Cannot delete your own account"
+        }
+    
+    # Check if user has admin permission
+    if not auth_system.has_permission(username, Permission.ADMIN):
+        return {
+            "status": "error",
+            "code": 403,
+            "error": "Permission denied: Admin permission required"
+        }
+    
+    try:
+        if auth_system.delete_user(target_username):
+            return {
+                "status": "success",
+                "message": f"User {target_username} deleted successfully"
+            }
+        else:
+            return {
+                "status": "error",
+                "error": f"Failed to delete user {target_username}"
+            }
+    except ValueError as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+    except Exception as e:
+        logger.error(f"Error deleting user: {e}")
+        return {
+            "status": "error",
+            "error": f"Error deleting user: {str(e)}"
+        }
+
 def main():
     """Main entry point."""
     global next_port
@@ -1635,6 +2265,10 @@ def main():
                         help=f"Logging level (default: {server_config['log_level']})")
     parser.add_argument("--shutdown-timeout", type=float, default=30.0,
                         help="Shutdown timeout in seconds (default: 30.0)")
+    parser.add_argument("--auth-config", default="auth_config.json",
+                        help="Authentication configuration file path (default: auth_config.json)")
+    parser.add_argument("--audit-log-dir", default="audit_logs",
+                        help="Directory for audit logs (default: audit_logs)")
     args = parser.parse_args()
     
     # Set logging level
@@ -1649,6 +2283,20 @@ def main():
     server_manager.next_port = next_port
     
     logger.info(f"Starting MCP-Forge Server on {args.host}:{args.port}")
+    
+    # Initialize authentication system
+    auth_system = AuthenticationSystem(config_path=args.auth_config)
+    logger.info("Authentication system initialized")
+    
+    # Initialize audit logger
+    audit_logger = get_audit_logger()
+    logger.info("Audit logging system initialized")
+    
+    # Log system startup event
+    audit_logger.log_system_event(
+        AuditEventType.SYS_STARTUP,
+        details={"host": args.host, "port": args.port}
+    )
     
     # Initialize monitoring components
     
