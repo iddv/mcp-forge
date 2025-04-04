@@ -32,6 +32,11 @@ from server_manager import ServerManager, ServerInstance
 from config_manager import ConfigManager
 from shutdown_handler import register_shutdown_hook, set_shutdown_timeout, get_shutdown_handler
 from auto_scaler import get_auto_scaler, ScalingRule, ServerGroup, AutoScaler
+from logging_system import configure_logging, get_logger
+from log_aggregator import initialize_log_aggregator, start_aggregation_service
+from status_reporter import get_status_reporter, start_status_reporting
+from metrics_collector import get_metrics_collector, start_metrics_collection
+from alerting_system import get_alerting_system, start_alerting_service
 
 # Setup logging
 logging.basicConfig(
@@ -1276,9 +1281,344 @@ def _handle_server_restart(instance_id: str, group: ServerGroup) -> bool:
     result = restart_server(instance_id)
     return result.get("status") == "success"
 
+@mcp_server.resource("system://logs")
+def system_logs_resource() -> str:
+    """Return aggregated system logs."""
+    try:
+        log_aggregator = log_aggregator if 'log_aggregator' in globals() else initialize_log_aggregator(None)
+        logs = log_aggregator.get_aggregated_logs(limit=100)
+        return json.dumps(logs, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting system logs: {e}")
+        return json.dumps({"error": str(e)}, indent=2)
+
+@mcp_server.resource("system://logs/{level}")
+def system_logs_by_level_resource(level: str) -> str:
+    """Return aggregated system logs filtered by level."""
+    try:
+        log_aggregator = log_aggregator if 'log_aggregator' in globals() else initialize_log_aggregator(None)
+        logs = log_aggregator.get_aggregated_logs(limit=100, level=level)
+        return json.dumps(logs, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting system logs by level: {e}")
+        return json.dumps({"error": str(e)}, indent=2)
+
+@mcp_server.resource("servers://{server_id}/logs")
+def server_logs_resource(server_id: str) -> str:
+    """Return logs for a specific server."""
+    try:
+        log_aggregator = log_aggregator if 'log_aggregator' in globals() else initialize_log_aggregator(None)
+        logs = log_aggregator.get_server_logs(server_id, limit=100)
+        return json.dumps(logs, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting logs for server {server_id}: {e}")
+        return json.dumps({"error": str(e)}, indent=2)
+
+@mcp_server.resource("system://status")
+def system_status_resource() -> str:
+    """Return system status information."""
+    try:
+        status_reporter = status_reporter if 'status_reporter' in globals() else get_status_reporter()
+        statuses = status_reporter.get_all_server_statuses()
+        return json.dumps(statuses, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting system status: {e}")
+        return json.dumps({"error": str(e)}, indent=2)
+
+@mcp_server.resource("servers://{server_id}/status")
+def server_status_resource(server_id: str) -> str:
+    """Return status for a specific server."""
+    try:
+        status_reporter = status_reporter if 'status_reporter' in globals() else get_status_reporter()
+        status = status_reporter.get_server_status(server_id)
+        if status:
+            return json.dumps(status, indent=2)
+        else:
+            return json.dumps({"error": f"Server not found: {server_id}"}, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting status for server {server_id}: {e}")
+        return json.dumps({"error": str(e)}, indent=2)
+
+@mcp_server.resource("system://metrics")
+def system_metrics_resource() -> str:
+    """Return system metrics."""
+    try:
+        metrics_collector = metrics_collector if 'metrics_collector' in globals() else get_metrics_collector()
+        metrics = metrics_collector.get_system_metrics(time_period="hour")
+        return json.dumps(metrics, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting system metrics: {e}")
+        return json.dumps({"error": str(e)}, indent=2)
+
+@mcp_server.resource("servers://{server_id}/metrics")
+def server_metrics_resource(server_id: str) -> str:
+    """Return metrics for a specific server."""
+    try:
+        metrics_collector = metrics_collector if 'metrics_collector' in globals() else get_metrics_collector()
+        metrics = metrics_collector.get_server_metrics(server_id, time_period="hour")
+        return json.dumps(metrics, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting metrics for server {server_id}: {e}")
+        return json.dumps({"error": str(e)}, indent=2)
+
+@mcp_server.resource("system://alerts")
+def system_alerts_resource() -> str:
+    """Return system alerts."""
+    try:
+        alerting_system = alerting_system if 'alerting_system' in globals() else get_alerting_system()
+        alerts = alerting_system.get_active_alerts()
+        return json.dumps(alerts, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting system alerts: {e}")
+        return json.dumps({"error": str(e)}, indent=2)
+
+@mcp_server.resource("system://alerts/history")
+def system_alerts_history_resource() -> str:
+    """Return system alert history."""
+    try:
+        alerting_system = alerting_system if 'alerting_system' in globals() else get_alerting_system()
+        alert_history = alerting_system.get_alert_history(limit=100)
+        return json.dumps(alert_history, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting system alert history: {e}")
+        return json.dumps({"error": str(e)}, indent=2)
+
+@mcp_server.tool()
+def acknowledge_alert(alert_id: str, user: str) -> Dict[str, Any]:
+    """
+    Acknowledge an alert.
+    
+    Args:
+        alert_id: ID of the alert to acknowledge
+        user: User acknowledging the alert
+        
+    Returns:
+        Dictionary with acknowledgment status
+    """
+    try:
+        alerting_system = alerting_system if 'alerting_system' in globals() else get_alerting_system()
+        success = alerting_system.acknowledge_alert(alert_id, user)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"Alert {alert_id} acknowledged by {user}"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Alert not found: {alert_id}"
+            }
+    except Exception as e:
+        logger.error(f"Error acknowledging alert {alert_id}: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@mcp_server.tool()
+def resolve_alert(alert_id: str, resolution_message: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Resolve an alert.
+    
+    Args:
+        alert_id: ID of the alert to resolve
+        resolution_message: Optional message explaining the resolution
+        
+    Returns:
+        Dictionary with resolution status
+    """
+    try:
+        alerting_system = alerting_system if 'alerting_system' in globals() else get_alerting_system()
+        success = alerting_system.resolve_alert(alert_id, resolution_message)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"Alert {alert_id} resolved"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Alert not found: {alert_id}"
+            }
+    except Exception as e:
+        logger.error(f"Error resolving alert {alert_id}: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@mcp_server.tool()
+def get_logs(source: str = "system", log_level: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
+    """
+    Get logs from the system or a specific server.
+    
+    Args:
+        source: "system" for aggregated logs or a server ID
+        log_level: Optional log level filter (error, warning, info, debug)
+        limit: Maximum number of log entries to return
+        
+    Returns:
+        Dictionary with log entries
+    """
+    try:
+        log_aggregator = log_aggregator if 'log_aggregator' in globals() else initialize_log_aggregator(None)
+        
+        if source == "system":
+            logs = log_aggregator.get_aggregated_logs(limit=limit, level=log_level)
+            return {
+                "status": "success",
+                "source": "system",
+                "log_level": log_level,
+                "count": len(logs),
+                "logs": logs
+            }
+        else:
+            # Assume source is a server ID
+            logs = log_aggregator.get_server_logs(source, limit=limit)
+            
+            # Filter by log level if specified
+            if log_level and logs:
+                logs = [log for log in logs if log.get("level", "").lower() == log_level.lower()]
+                
+            return {
+                "status": "success",
+                "source": source,
+                "log_level": log_level,
+                "count": len(logs),
+                "logs": logs
+            }
+    except Exception as e:
+        logger.error(f"Error getting logs: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@mcp_server.tool()
+def get_server_status(server_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get status information for a server or all servers.
+    
+    Args:
+        server_id: Optional server ID. If not provided, status for all servers is returned.
+        
+    Returns:
+        Dictionary with server status information
+    """
+    try:
+        status_reporter = status_reporter if 'status_reporter' in globals() else get_status_reporter()
+        
+        if server_id:
+            status = status_reporter.get_server_status(server_id)
+            if status:
+                return {
+                    "status": "success",
+                    "server_id": server_id,
+                    "server_status": status
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Server not found: {server_id}"
+                }
+        else:
+            # Get status for all servers
+            statuses = status_reporter.get_all_server_statuses()
+            return {
+                "status": "success",
+                "count": len(statuses),
+                "servers": statuses
+            }
+    except Exception as e:
+        logger.error(f"Error getting server status: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@mcp_server.tool()
+def get_metrics(source: str = "system", time_period: str = "hour") -> Dict[str, Any]:
+    """
+    Get performance metrics for the system or a specific server.
+    
+    Args:
+        source: "system" for system metrics or a server ID
+        time_period: Time period for metrics (hour, day, week, all)
+        
+    Returns:
+        Dictionary with metrics data
+    """
+    try:
+        metrics_collector = metrics_collector if 'metrics_collector' in globals() else get_metrics_collector()
+        
+        if source == "system":
+            metrics = metrics_collector.get_system_metrics(time_period)
+            return {
+                "status": "success",
+                "source": "system",
+                "time_period": time_period,
+                "count": len(metrics),
+                "metrics": metrics
+            }
+        else:
+            # Assume source is a server ID
+            metrics = metrics_collector.get_server_metrics(source, time_period)
+            return {
+                "status": "success",
+                "source": source,
+                "time_period": time_period,
+                "count": len(metrics),
+                "metrics": metrics
+            }
+    except Exception as e:
+        logger.error(f"Error getting metrics: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@mcp_server.tool()
+def get_alerts(active_only: bool = True, limit: int = 100) -> Dict[str, Any]:
+    """
+    Get system alerts.
+    
+    Args:
+        active_only: Whether to return only active (unresolved) alerts
+        limit: Maximum number of alerts to return
+        
+    Returns:
+        Dictionary with alerts data
+    """
+    try:
+        alerting_system = alerting_system if 'alerting_system' in globals() else get_alerting_system()
+        
+        if active_only:
+            alerts = alerting_system.get_active_alerts()
+        else:
+            alerts = alerting_system.get_alert_history(limit)
+            
+        return {
+            "status": "success",
+            "active_only": active_only,
+            "count": len(alerts),
+            "alerts": alerts
+        }
+    except Exception as e:
+        logger.error(f"Error getting alerts: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 def main():
     """Main entry point."""
     global next_port
+    
+    # Configure logging system first
+    logging_system = configure_logging()
+    logger = get_logger('forge_mcp_server')
     
     # Load configuration
     config_manager.load_config()
@@ -1310,6 +1650,33 @@ def main():
     
     logger.info(f"Starting MCP-Forge Server on {args.host}:{args.port}")
     
+    # Initialize monitoring components
+    
+    # Initialize log aggregator
+    log_aggregator = initialize_log_aggregator(logging_system)
+    
+    # Initialize status reporter
+    status_reporter = get_status_reporter()
+    status_reporter.register_forge_server(
+        "forge-server", 
+        "MCP Forge Server", 
+        os.getpid()
+    )
+    
+    # Initialize metrics collector
+    metrics_collector = get_metrics_collector()
+    
+    # Initialize alerting system
+    alerting_system = get_alerting_system()
+    
+    # Register alert handlers
+    alerting_system.register_alert_handler(
+        "resource_monitor",
+        lambda: []  # Placeholder - will be replaced with actual handler
+    )
+    
+    logger.info("Logging and monitoring components initialized")
+    
     # Recover any existing server instances
     server_manager.recover_instances()
     
@@ -1336,10 +1703,50 @@ def main():
         name="stop_auto_scaler"
     )
     register_shutdown_hook(
+        lambda: log_aggregator.stop_aggregation(),
+        priority=60,
+        name="stop_log_aggregator"
+    )
+    register_shutdown_hook(
+        lambda: status_reporter.stop_reporting(),
+        priority=60,
+        name="stop_status_reporter"
+    )
+    register_shutdown_hook(
+        lambda: metrics_collector.stop_collection(),
+        priority=60,
+        name="stop_metrics_collector"
+    )
+    register_shutdown_hook(
+        lambda: alerting_system.stop_alerting(),
+        priority=60,
+        name="stop_alerting_system"
+    )
+    register_shutdown_hook(
         lambda: logger.info("MCP-Forge Server shutdown complete"),
         priority=-100,
         name="shutdown_complete"
     )
+    
+    # Start monitoring components
+    logger.info("Starting monitoring components")
+    import asyncio
+    
+    # Create background tasks for monitoring components
+    asyncio.create_task(start_aggregation_service(
+        interval_seconds=server_config.get("logging", {}).get("aggregation_interval", 30)
+    ))
+    asyncio.create_task(start_status_reporting(
+        interval_seconds=server_config.get("monitoring", {}).get("status_interval", 60)
+    ))
+    asyncio.create_task(start_metrics_collection(
+        interval_seconds=server_config.get("monitoring", {}).get("metrics_interval", 60)
+    ))
+    asyncio.create_task(start_alerting_service(
+        interval_seconds=server_config.get("monitoring", {}).get("alert_interval", 60)
+    ))
+    
+    logger.info("Monitoring components started")
     
     # Start the server
     try:

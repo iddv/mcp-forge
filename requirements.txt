@@ -1,6 +1,10 @@
-# Meta-MCP Server Framework requirements
+# MCP-Forge Framework requirements
 mcp>=1.6.0  # Official Model Context Protocol Python SDK
-httpx>=0.28.0
-anyio>=4.0.0
+httpx>=0.28.0  # HTTP client for API requests
+anyio>=4.0.0  # Asynchronous I/O support
 psutil>=5.9.0  # Process and system monitoring
-# No other external dependencies required - all other modules are built into Python's standard library 
+requests>=2.31.0  # For webhook notifications
+python-dateutil>=2.8.2  # For date parsing and manipulation
+aiosmtplib>=2.0.1  # Async SMTP client for email notifications
+prometheus-client>=0.17.1  # For exposing metrics (optional)
+# All other modules are built into Python's standard library 
