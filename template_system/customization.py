@@ -238,3 +238,74 @@ def handle_auth(username: str, password: str = None, token: str = None) -> Dict[
             result = self.apply_server_options(result, options)
             
         return result 
+
+def get_available_capabilities() -> List[str]:
+    """
+    Get a list of all available capabilities.
+    
+    Returns:
+        List of capability names.
+    """
+    return [
+        "echo", "time", "uptime", "claude",
+        "file_operations", "http_requests", "database_access"
+    ]
+
+def get_available_handlers() -> List[str]:
+    """
+    Get a list of all available handlers.
+    
+    Returns:
+        List of handler names.
+    """
+    from .handlers import get_available_handlers as get_handlers
+    return get_handlers()
+
+def get_available_options() -> Dict[str, Dict[str, Any]]:
+    """
+    Get a dictionary of available server options.
+    
+    Returns:
+        Dictionary of option categories and their values.
+    """
+    return {
+        "persistence": {
+            "name": "Persistence",
+            "description": "Enable data persistence for the server",
+            "options": ["memory", "file", "sqlite"]
+        },
+        "auth": {
+            "name": "Authentication",
+            "description": "Enable authentication for the server",
+            "options": ["none", "basic", "token"]
+        },
+        "logging": {
+            "name": "Logging", 
+            "description": "Configure logging for the server",
+            "options": ["basic", "detailed", "debug"]
+        },
+        "claude": {
+            "name": "Claude AI",
+            "description": "Configure Claude AI for the server",
+            "options": {
+                "model": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+                "api_key": "string",
+                "max_tokens": "integer",
+                "temperature": "float",
+                "top_p": "float"
+            }
+        }
+    }
+
+def get_template_type_for_capabilities(capabilities: List[str]) -> str:
+    """
+    Get the most appropriate template type for the given capabilities.
+    
+    Args:
+        capabilities: List of capability names
+        
+    Returns:
+        The template type to use
+    """
+    from .templates import get_template_for_capabilities
+    return get_template_for_capabilities(capabilities) 

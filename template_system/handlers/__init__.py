@@ -1,151 +1,161 @@
 """
-Custom Handler Templates
+Handler system for MCP-Forge server templates.
 
-This module contains templates for custom handlers that can be added to MCP servers.
+This module provides custom handlers that can be included in generated MCP servers.
 """
 
-from typing import Dict, Any, List
+import os
+import logging
+from typing import Dict, Any, List, Callable, Optional
 
-def get_handler_templates() -> Dict[str, Dict[str, Any]]:
+# Configure logging
+logger = logging.getLogger("mcp_forge.handlers")
+
+# Registry of available handlers
+_handlers_registry = {}
+
+def register_handler(name: str, create_func: Callable[[Dict[str, Any]], Any]) -> None:
     """
-    Get a dictionary of available handler templates.
+    Register a handler with the system.
     
-    Returns:
-        Dictionary mapping handler names to their templates.
+    Args:
+        name: The name of the handler
+        create_func: Function to create a handler instance
     """
-    return {
-        "file_reader": {
-            "name": "File Reader",
-            "description": "Reads files from the server's filesystem",
-            "function_template": """
-@mcp_server.tool()
-def handle_file_reader(file_path: str) -> Dict[str, Any]:
-    \"\"\"
-    Read a file from the server's filesystem.
+    _handlers_registry[name] = create_func
+    logger.debug(f"Registered handler: {name}")
+
+def get_handler_creator(name: str) -> Optional[Callable]:
+    """
+    Get a handler creator function by name.
     
     Args:
-        file_path: Path to the file to read.
+        name: The name of the handler
         
     Returns:
-        Dictionary containing file content or error.
-    \"\"\"
-    try:
-        with open(file_path, 'r') as f:
-            content = f.read()
+        Handler creator function or None if not found
+    """
+    return _handlers_registry.get(name)
+
+def get_available_handlers() -> List[str]:
+    """
+    Get a list of available handlers.
+    
+    Returns:
+        List of handler names
+    """
+    return list(_handlers_registry.keys())
+
+def _register_builtin_handlers() -> None:
+    """Register built-in handlers."""
+    # File Reader handler
+    def create_file_reader(config):
+        """Create a file reader handler."""
+        from .file_reader_handler import FileReaderHandler
+        return FileReaderHandler(config)
+    
+    register_handler("file_reader", create_file_reader)
+    
+    # HTTP Request handler
+    def create_http_request(config):
+        """Create an HTTP request handler."""
+        from .http_request_handler import HttpRequestHandler
+        return HttpRequestHandler(config)
+    
+    register_handler("http_request", create_http_request)
+    
+    # Database handler
+    def create_database(config):
+        """Create a database handler."""
+        from .database_handler import DatabaseHandler
+        return DatabaseHandler(config)
+    
+    register_handler("database", create_database)
+    
+    # Claude AI handler
+    def create_claude(config):
+        """Create a Claude AI handler."""
+        from .claude_handler import ClaudeHandler
+        return ClaudeHandler(config)
+    
+    register_handler("claude", create_claude)
+    
+def _discover_custom_handlers() -> None:
+    """Discover and register custom handlers from the handlers directory."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    for filename in os.listdir(current_dir):
+        if filename.endswith("_handler.py") and filename != "__init__.py":
+            module_name = filename[:-3]  # Remove .py
+            handler_name = module_name.replace("_handler", "")
             
-        return {
-            "status": "success",
-            "content": content
-        }
-    except Exception as e:
-        logger.error(f"Error reading file: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
-"""
-        },
-        "http_request": {
-            "name": "HTTP Request",
-            "description": "Makes HTTP requests to external services",
-            "imports": ["import httpx"],
-            "function_template": """
-@mcp_server.tool()
-def handle_http_request(url: str, method: str = "GET", headers: Optional[Dict[str, str]] = None, data: Optional[str] = None) -> Dict[str, Any]:
-    \"\"\"
-    Make an HTTP request to an external service.
+            try:
+                module = __import__(f"template_system.handlers.{module_name}", fromlist=["create_handler"])
+                if hasattr(module, "create_handler"):
+                    register_handler(handler_name, module.create_handler)
+            except ImportError as e:
+                logger.warning(f"Could not import handler module {module_name}: {e}")
+            except AttributeError as e:
+                logger.warning(f"Handler module {module_name} does not have create_handler function: {e}")
+
+# Initialize handlers
+_register_builtin_handlers()
+_discover_custom_handlers()
+
+# Add capability-handler mapping
+capability_handler_map = {
+    "file_operations": "file_reader",
+    "http_requests": "http_request",
+    "database_access": "database",
+    "claude": "claude",
+}
+
+def get_handlers_for_capabilities(capabilities: List[str]) -> List[str]:
+    """
+    Get required handlers for a set of capabilities.
     
     Args:
-        url: URL to request.
-        method: HTTP method to use (GET, POST, etc.).
-        headers: Optional request headers.
-        data: Optional request data.
+        capabilities: List of capability names
         
     Returns:
-        Dictionary containing response information.
-    \"\"\"
-    try:
-        if headers is None:
-            headers = {}
-            
-        # Create HTTP client
-        client = httpx.Client(timeout=10.0)
-        
-        # Make request
-        response = client.request(
-            method=method,
-            url=url,
-            headers=headers,
-            content=data
-        )
-        
-        return {
-            "status": "success",
-            "status_code": response.status_code,
-            "headers": dict(response.headers),
-            "content": response.text
-        }
-    except Exception as e:
-        logger.error(f"Error making HTTP request: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
-"""
-        },
-        "database": {
-            "name": "Database",
-            "description": "Provides simple database functionality with SQLite",
-            "imports": ["import sqlite3"],
-            "function_template": """
-@mcp_server.tool()
-def handle_database(query: str, params: Optional[List[Any]] = None) -> Dict[str, Any]:
-    \"\"\"
-    Execute a database query.
+        List of handler names needed for the capabilities
+    """
+    required_handlers = []
     
-    Args:
-        query: SQL query to execute.
-        params: Query parameters.
-        
-    Returns:
-        Dictionary containing query results or error.
-    \"\"\"
-    try:
-        if params is None:
-            params = []
-            
-        # Connect to database
-        conn = sqlite3.connect('server_data.db')
-        cursor = conn.cursor()
-        
-        # Execute query
-        cursor.execute(query, params)
-        
-        # Check if query returns data
-        if query.strip().upper().startswith('SELECT'):
-            columns = [col[0] for col in cursor.description]
-            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-            conn.close()
-            
-            return {
-                "status": "success",
-                "results": results
-            }
-        else:
-            # For non-SELECT queries
-            conn.commit()
-            conn.close()
-            
-            return {
-                "status": "success",
-                "rows_affected": cursor.rowcount
-            }
-    except Exception as e:
-        logger.error(f"Error executing database query: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
-"""
-        }
-    } 
+    for capability in capabilities:
+        if capability in capability_handler_map:
+            handler = capability_handler_map[capability]
+            if handler not in required_handlers:
+                required_handlers.append(handler)
+    
+    return required_handlers
+
+# Handler configuration templates for various types of handlers
+handler_config_templates = {
+    "file_reader": {
+        "allowed_directories": [os.path.expanduser("~")],
+        "max_file_size_mb": 10,
+        "allow_writes": False
+    },
+    "http_request": {
+        "allowed_domains": ["api.example.com", "data.example.org"],
+        "timeout_seconds": 30,
+        "max_response_size_mb": 5,
+        "verify_ssl": True
+    },
+    "database": {
+        "connection_string": "sqlite:///database.db",
+        "pool_size": 5,
+        "max_overflow": 10,
+        "timeout_seconds": 30
+    },
+    "claude": {
+        "api_key": "",  # Should be set from environment variable or secure config
+        "model": "claude-3-opus-20240229",
+        "max_tokens": 4096,
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "request_timeout": 120,
+        "enable_streaming": True
+    }
+} 

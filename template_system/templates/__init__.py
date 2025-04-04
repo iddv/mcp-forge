@@ -1,36 +1,97 @@
 """
-MCP Server Templates
+MCP server templates for MCP-Forge.
 
-This module contains template files used to generate MCP servers.
+This package contains templates for generating different types of MCP servers.
 """
 
 import os
-from typing import Dict, Any, List
+import logging
+from typing import Dict, Any, List, Optional
 
-def get_base_template_path() -> str:
+# Configure logging
+logger = logging.getLogger("mcp_forge.templates")
+
+def get_base_template() -> str:
     """
-    Get the path to the base server template.
+    Get the contents of the base server template.
     
     Returns:
-        Path to the base server template.
+        The contents of the base server template as a string.
     """
-    return os.path.join(os.path.dirname(__file__), 'base_server.py')
+    base_template_path = os.path.join(os.path.dirname(__file__), "base_server.py")
+    with open(base_template_path, "r") as f:
+        return f.read()
 
-def get_available_templates() -> List[Dict[str, Any]]:
+def get_claude_template() -> str:
     """
-    Get a list of available server templates.
+    Get the contents of the Claude-enabled server template.
     
     Returns:
-        List of dictionaries containing template information.
+        The contents of the Claude server template as a string.
     """
-    templates_dir = os.path.dirname(__file__)
-    templates = []
+    claude_template_path = os.path.join(os.path.dirname(__file__), "claude_server.py")
+    with open(claude_template_path, "r") as f:
+        return f.read()
+
+def get_template(template_type: str) -> Optional[str]:
+    """
+    Get a template by type.
     
-    for filename in os.listdir(templates_dir):
-        if filename.endswith('.py') and filename != '__init__.py':
-            templates.append({
-                'name': filename.replace('.py', ''),
-                'path': os.path.join(templates_dir, filename)
-            })
-            
-    return templates 
+    Args:
+        template_type: The type of template to get
+        
+    Returns:
+        The template contents as a string, or None if not found
+    """
+    if template_type == "base":
+        return get_base_template()
+    elif template_type == "claude":
+        return get_claude_template()
+    else:
+        logger.warning(f"Unknown template type: {template_type}")
+        return None
+
+def get_available_templates() -> List[str]:
+    """
+    Get a list of available template types.
+    
+    Returns:
+        List of template type names
+    """
+    return ["base", "claude"]
+
+def get_template_for_capabilities(capabilities: List[str]) -> str:
+    """
+    Get the most appropriate template for the given capabilities.
+    
+    Args:
+        capabilities: List of capability names
+        
+    Returns:
+        The template type to use
+    """
+    if "claude" in capabilities:
+        return "claude"
+    else:
+        return "base"
+
+# Default template variables
+default_template_variables = {
+    "base": {
+        "server_name": "MCP Server",
+        "server_description": "A customizable MCP server",
+        "additional_tools": ""
+    },
+    "claude": {
+        "server_name": "Claude MCP Server",
+        "server_description": "An MCP server with Claude AI capabilities",
+        "claude_api_key": "",
+        "claude_model": "claude-3-opus-20240229",
+        "claude_max_tokens": 4096,
+        "claude_temperature": 0.7,
+        "claude_top_p": 0.9,
+        "claude_request_timeout": 120,
+        "claude_enable_streaming": True,
+        "additional_tools": ""
+    }
+} 

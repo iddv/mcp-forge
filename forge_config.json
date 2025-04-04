@@ -1,0 +1,87 @@
+{
+  "server": {
+    "host": "localhost",
+    "port": 9000,
+    "log_level": "INFO",
+    "max_servers": 100,
+    "auto_start": true
+  },
+  "templates": {
+    "default_capabilities": [
+      "echo",
+      "time",
+      "uptime",
+      "claude"
+    ],
+    "allow_custom_capabilities": true,
+    "default_handlers": []
+  },
+  "security": {
+    "enable_authentication": false,
+    "authentication_type": "basic",
+    "allowed_ip_ranges": [
+      "127.0.0.1/32",
+      "::1/128"
+    ],
+    "csrf_token_expiry": 3600,
+    "rate_limits": {
+      "ip_rate_limit": 100,
+      "global_rate_limit": 1000,
+      "burst_threshold": 30
+    },
+    "blacklist_duration_minutes": 60,
+    "intrusion_detection": {
+      "enabled": true,
+      "threshold": 5
+    },
+    "ssl": {
+      "enabled": false,
+      "cert_file": "",
+      "key_file": ""
+    }
+  },
+  "resources": {
+    "memory_limit_mb": 500,
+    "cpu_limit_percent": 50,
+    "enable_throttling": false,
+    "throttling_strategy": "pause",
+    "monitor_interval_seconds": 10,
+    "alerts": {
+      "memory_warning_percent": 80,
+      "cpu_warning_percent": 80
+    }
+  },
+  "persistence": {
+    "save_server_state": true,
+    "state_file": "forge_server_state.json",
+    "backup_count": 3,
+    "auto_save_interval_minutes": 5
+  },
+  "mcpServers": {
+    "windows-volume-control": {
+      "command": "cmd.exe",
+      "args": [
+        "/c", 
+        "cd /d C:\\Users\\iddvi\\Documents\\windows-volume-control-mcp && .\\venv\\Scripts\\python.exe mcp_server_official.py"
+      ]
+    }
+  },
+  "claude": {
+    "api_key": "YOUR_ANTHROPIC_API_KEY",
+    "model": "claude-3-opus-20240229",
+    "max_tokens": 4096,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "request_timeout": 120,
+    "enable_streaming": true,
+    "max_concurrent_requests": 5
+  },
+  "advanced": {
+    "debug_mode": false,
+    "enable_experimental": false,
+    "connection_timeout_seconds": 30,
+    "request_timeout_seconds": 60,
+    "server_script_directory": "servers",
+    "child_server_port_range": [9001, 9999]
+  }
+}

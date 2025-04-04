@@ -7,4 +7,6 @@ requests>=2.31.0  # For webhook notifications
 python-dateutil>=2.8.2  # For date parsing and manipulation
 aiosmtplib>=2.0.1  # Async SMTP client for email notifications
 prometheus-client>=0.17.1  # For exposing metrics (optional)
+jsonschema>=4.17.3  # For configuration validation
+anthropic>=0.15.0  # Claude API client (optional, but recommended)
 # All other modules are built into Python's standard library 
