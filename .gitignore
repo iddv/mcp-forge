@@ -110,4 +110,23 @@ dmypy.json
 # MCP-Forge specific
 /servers/
 *.db
-progress_data.json 
+progress_data.json
+
+# Runtime configuration files
+forge_config.json
+*_config.json
+forge_server_state.json
+
+# Configuration backups
+config_backups/
+*_backups/
+
+# Schema files - commit the example but not working copies
+# Uncomment if you want to commit schema files:
+# !forge_config.schema.json
+# !forge_config_example.json
+
+# Logs and runtime data
+*.log.*
+meta_mcp_server.log
+forge_mcp_server.log 
