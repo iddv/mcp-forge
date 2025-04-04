@@ -12,6 +12,7 @@ It provides functionality to:
 import os
 import re
 import json
+import subprocess
 from datetime import datetime
 
 class ProgressTracker:
@@ -88,7 +89,8 @@ class ProgressTracker:
             progress_data[task_key] = {
                 'status': task['status'],
                 'notes': task['notes'],
-                'last_updated': task['last_updated']
+                'last_updated': task['last_updated'],
+                'commit_sha': task.get('commit_sha')
             }
             
         with open(self.PROGRESS_DATA_FILE, 'w') as f:
@@ -153,8 +155,17 @@ class ProgressTracker:
         with open(self.PLAN_FILE, 'w') as f:
             f.write(content)
     
-    def update_task_status(self, phase, task_name, new_status, notes=None):
-        """Update the status of a specific task."""
+    def update_task_status(self, phase, task_name, new_status, notes=None, commit_sha=None):
+        """
+        Update the status of a specific task.
+        
+        Args:
+            phase: Phase number
+            task_name: Task name
+            new_status: New status
+            notes: Optional notes
+            commit_sha: Optional commit SHA to associate with this update
+        """
         if new_status not in self.STATUS_OPTIONS:
             print(f"Invalid status. Choose from: {', '.join(self.STATUS_OPTIONS)}")
             return False
@@ -165,6 +176,8 @@ class ProgressTracker:
                 task['last_updated'] = datetime.now().isoformat()
                 if notes:
                     task['notes'] = notes
+                if commit_sha:
+                    task['commit_sha'] = commit_sha
                     
                 self.save_progress_data()
                 self.update_plan_file()
@@ -193,6 +206,24 @@ class ProgressTracker:
             'percent_blocked': round(blocked / total * 100, 1) if total else 0
         }
     
+    def get_current_commit(self):
+        """
+        Get the current commit SHA.
+        
+        Returns:
+            Current commit SHA or None if not in a git repository
+        """
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return None
+    
     def generate_report(self):
         """Generate a progress report."""
         stats = self.get_statistics()
@@ -219,7 +250,8 @@ class ProgressTracker:
             
             for task in sorted(phase_tasks, key=lambda x: x['task']):
                 status_marker = "✓" if task['status'] == 'Completed' else "→" if task['status'] == 'In Progress' else "✗" if task['status'] == 'Blocked' else "•"
-                report += f"- {status_marker} {task['task']}: {task['status']}\n"
+                commit_info = f" [commit:{task.get('commit_sha', 'unknown')}]" if task.get('commit_sha') else ""
+                report += f"- {status_marker} {task['task']}: {task['status']}{commit_info}\n"
             
             report += "\n"
         
@@ -233,7 +265,8 @@ class ProgressTracker:
         
         for task in recent_tasks[:5]:  # Show 5 most recent updates
             date_str = datetime.fromisoformat(task['last_updated']).strftime('%Y-%m-%d')
-            report += f"- {date_str}: Phase {task['phase']} - {task['task']} → {task['status']}\n"
+            commit_info = f" [commit:{task.get('commit_sha', '')[:7]}]" if task.get('commit_sha') else ""
+            report += f"- {date_str}: Phase {task['phase']} - {task['task']} → {task['status']}{commit_info}\n"
         
         return report
 
@@ -250,6 +283,7 @@ def main():
     update_parser.add_argument("task", type=str, help="Task name")
     update_parser.add_argument("status", choices=ProgressTracker.STATUS_OPTIONS, help="New status")
     update_parser.add_argument("--notes", type=str, help="Optional notes")
+    update_parser.add_argument("--commit", type=str, help="Commit SHA to associate with this update")
     
     # Stats command
     subparsers.add_parser("stats", help="Show progress statistics")
@@ -266,8 +300,15 @@ def main():
     tracker = ProgressTracker()
     
     if args.command == "update":
-        tracker.update_task_status(args.phase, args.task, args.status, args.notes)
-        print(f"Updated task: Phase {args.phase} - {args.task} → {args.status}")
+        # If commit not provided, try to get current commit
+        commit_sha = args.commit
+        if not commit_sha:
+            commit_sha = tracker.get_current_commit()
+            
+        tracker.update_task_status(args.phase, args.task, args.status, args.notes, commit_sha)
+        
+        commit_info = f" [commit:{commit_sha[:7]}]" if commit_sha else ""
+        print(f"Updated task: Phase {args.phase} - {args.task} → {args.status}{commit_info}")
         
     elif args.command == "stats":
         stats = tracker.get_statistics()
