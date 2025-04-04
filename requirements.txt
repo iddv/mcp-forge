@@ -1,0 +1,5 @@
+# Meta-MCP Server Framework requirements
+mcp>=1.6.0  # Official Model Context Protocol Python SDK
+httpx>=0.28.0
+anyio>=4.0.0
+# No other external dependencies required - all other modules are built into Python's standard library 
