@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP-Forge Configuration Schema",
+  "description": "Configuration schema for the MCP-Forge server framework",
+  "type": "object",
+  "required": ["server", "templates", "security", "resources", "persistence"],
+  "properties": {
+    "server": {
+      "type": "object",
+      "description": "Basic server configuration",
+      "required": ["host", "port", "log_level", "max_servers"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "Server host address",
+          "default": "localhost"
+        },
+        "port": {
+          "type": "integer",
+          "description": "Server port",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 9000
+        },
+        "log_level": {
+          "type": "string",
+          "description": "Logging level",
+          "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+          "default": "INFO"
+        },
+        "max_servers": {
+          "type": "integer",
+          "description": "Maximum number of servers that can be created",
+          "minimum": 1,
+          "default": 100
+        },
+        "auto_start": {
+          "type": "boolean",
+          "description": "Whether to automatically start saved servers on startup",
+          "default": true
+        }
+      }
+    },
+    "templates": {
+      "type": "object",
+      "description": "Template system configuration",
+      "required": ["default_capabilities", "allow_custom_capabilities", "default_handlers"],
+      "properties": {
+        "default_capabilities": {
+          "type": "array",
+          "description": "Default capabilities for new servers",
+          "items": {
+            "type": "string"
+          },
+          "default": ["echo", "time", "uptime"]
+        },
+        "allow_custom_capabilities": {
+          "type": "boolean",
+          "description": "Whether custom capabilities can be specified",
+          "default": true
+        },
+        "default_handlers": {
+          "type": "array",
+          "description": "Default handlers for new servers",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "custom_templates_dir": {
+          "type": "string",
+          "description": "Directory for user-defined custom templates",
+          "default": "custom_templates"
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "description": "Security configuration",
+      "required": ["enable_authentication", "authentication_type", "allowed_ip_ranges"],
+      "properties": {
+        "enable_authentication": {
+          "type": "boolean",
+          "description": "Whether authentication is enabled",
+          "default": false
+        },
+        "authentication_type": {
+          "type": "string",
+          "description": "Type of authentication",
+          "enum": ["none", "basic", "token", "oauth"],
+          "default": "basic"
+        },
+        "allowed_ip_ranges": {
+          "type": "array",
+          "description": "IP ranges allowed to connect to the server",
+          "items": {
+            "type": "string",
+            "pattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$|^::1\\/128$"
+          },
+          "default": ["127.0.0.1/32", "::1/128"]
+        },
+        "ssl": {
+          "type": "object",
+          "description": "SSL/TLS configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether SSL/TLS is enabled",
+              "default": false
+            },
+            "cert_file": {
+              "type": "string",
+              "description": "Path to SSL certificate file"
+            },
+            "key_file": {
+              "type": "string",
+              "description": "Path to SSL key file"
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "description": "Resource management configuration",
+      "required": ["memory_limit_mb", "cpu_limit_percent", "enable_throttling"],
+      "properties": {
+        "memory_limit_mb": {
+          "type": "number",
+          "description": "Global memory limit in MB",
+          "minimum": 1,
+          "default": 500
+        },
+        "cpu_limit_percent": {
+          "type": "number",
+          "description": "Global CPU usage limit in percent",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        },
+        "enable_throttling": {
+          "type": "boolean",
+          "description": "Whether to throttle resource usage",
+          "default": false
+        },
+        "throttling_strategy": {
+          "type": "string",
+          "description": "Strategy to use for throttling",
+          "enum": ["pause", "restart", "scale_down"],
+          "default": "pause"
+        },
+        "monitor_interval_seconds": {
+          "type": "number",
+          "description": "Interval for resource monitoring in seconds",
+          "minimum": 1,
+          "default": 10
+        },
+        "alerts": {
+          "type": "object",
+          "description": "Resource alert thresholds",
+          "properties": {
+            "memory_warning_percent": {
+              "type": "number",
+              "description": "Memory usage percentage that triggers a warning",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 80
+            },
+            "cpu_warning_percent": {
+              "type": "number",
+              "description": "CPU usage percentage that triggers a warning",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 80
+            }
+          }
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "description": "Data persistence configuration",
+      "required": ["save_server_state", "state_file", "backup_count"],
+      "properties": {
+        "save_server_state": {
+          "type": "boolean",
+          "description": "Whether to save server state",
+          "default": true
+        },
+        "state_file": {
+          "type": "string",
+          "description": "File to save server state",
+          "default": "forge_server_state.json"
+        },
+        "backup_count": {
+          "type": "integer",
+          "description": "Number of backup files to keep",
+          "minimum": 0,
+          "default": 3
+        },
+        "auto_save_interval_minutes": {
+          "type": "number",
+          "description": "Interval for auto-saving state in minutes",
+          "minimum": 1,
+          "default": 10
+        },
+        "storage_type": {
+          "type": "string",
+          "description": "Type of storage for persistence",
+          "enum": ["file", "sqlite", "redis"],
+          "default": "file"
+        },
+        "storage_options": {
+          "type": "object",
+          "description": "Additional options for the selected storage type"
+        }
+      }
+    },
+    "advanced": {
+      "type": "object",
+      "description": "Advanced configuration options",
+      "properties": {
+        "debug_mode": {
+          "type": "boolean",
+          "description": "Enable debug mode with additional logging",
+          "default": false
+        },
+        "enable_experimental": {
+          "type": "boolean",
+          "description": "Enable experimental features",
+          "default": false
+        },
+        "process_priority": {
+          "type": "string",
+          "description": "Process priority for child servers",
+          "enum": ["low", "normal", "high"],
+          "default": "normal"
+        },
+        "connection_timeout_seconds": {
+          "type": "number",
+          "description": "Timeout for connections in seconds",
+          "minimum": 1,
+          "default": 30
+        },
+        "request_timeout_seconds": {
+          "type": "number",
+          "description": "Timeout for requests in seconds",
+          "minimum": 1,
+          "default": 60
+        }
+      }
+    }
+  }
+} 

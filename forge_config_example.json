@@ -1,0 +1,66 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 9000,
+    "log_level": "INFO",
+    "max_servers": 50,
+    "auto_start": true
+  },
+  "templates": {
+    "default_capabilities": [
+      "echo",
+      "time",
+      "uptime",
+      "status"
+    ],
+    "allow_custom_capabilities": true,
+    "default_handlers": [
+      "basic_filesystem"
+    ],
+    "custom_templates_dir": "custom_templates"
+  },
+  "security": {
+    "enable_authentication": true,
+    "authentication_type": "basic",
+    "allowed_ip_ranges": [
+      "127.0.0.1/32",
+      "10.0.0.0/8",
+      "192.168.0.0/16",
+      "::1/128"
+    ],
+    "ssl": {
+      "enabled": false,
+      "cert_file": "certs/server.crt",
+      "key_file": "certs/server.key"
+    }
+  },
+  "resources": {
+    "memory_limit_mb": 1024,
+    "cpu_limit_percent": 75,
+    "enable_throttling": true,
+    "throttling_strategy": "pause",
+    "monitor_interval_seconds": 5,
+    "alerts": {
+      "memory_warning_percent": 85,
+      "cpu_warning_percent": 90
+    }
+  },
+  "persistence": {
+    "save_server_state": true,
+    "state_file": "forge_server_state.json",
+    "backup_count": 5,
+    "auto_save_interval_minutes": 5,
+    "storage_type": "file",
+    "storage_options": {
+      "compression": true,
+      "encrypt": false
+    }
+  },
+  "advanced": {
+    "debug_mode": false,
+    "enable_experimental": false,
+    "process_priority": "normal",
+    "connection_timeout_seconds": 30,
+    "request_timeout_seconds": 120
+  }
+} 
