@@ -71,6 +71,7 @@ def _add_deps(project_dir: Path, deps: List[str]) -> None:
         return
 
     content = pyproject.read_text()
+    lines = content.split("\n")
 
     for dep in deps:
         # Extract bare package name for substring check
@@ -78,16 +79,16 @@ def _add_deps(project_dir: Path, deps: List[str]) -> None:
         if pkg_name in content:
             continue
 
-        # Insert before the closing ] of the dependencies list
-        content = re.sub(
-            r'(dependencies\s*=\s*\[.*?)(])',
-            rf'\1    "{dep}",\n\2',
-            content,
-            count=1,
-            flags=re.DOTALL,
-        )
+        # Find the dependencies array and insert before its closing ]
+        in_deps = False
+        for i, line in enumerate(lines):
+            if re.match(r'^dependencies\s*=\s*\[', line):
+                in_deps = True
+            if in_deps and line.strip() == "]":
+                lines.insert(i, f'    "{dep}",')
+                break
 
-    pyproject.write_text(content)
+    pyproject.write_text("\n".join(lines))
 
 
 def add_feature(feature_name: str, project_dir: Path) -> None:
@@ -118,14 +119,21 @@ def add_feature(feature_name: str, project_dir: Path) -> None:
     project_name = _read_project_name(project_dir)
     snippet_text = snippet_text.replace("{{name}}", project_name)
 
-    # Insert into server.py
+    # Insert into server.py — before def main() if it exists,
+    # otherwise before if __name__, otherwise append
     content = server_py.read_text()
-    marker = 'if __name__ == "__main__":'
+    main_marker = "\ndef main():"
+    name_marker = 'if __name__ == "__main__":'
 
-    if marker in content:
+    if main_marker in content:
         content = content.replace(
-            marker,
-            snippet_text.rstrip("\n") + "\n\n\n" + marker,
+            main_marker,
+            "\n" + snippet_text.rstrip("\n") + "\n" + main_marker,
+        )
+    elif name_marker in content:
+        content = content.replace(
+            name_marker,
+            snippet_text.rstrip("\n") + "\n\n\n" + name_marker,
         )
     else:
         content = content.rstrip("\n") + "\n\n" + snippet_text
