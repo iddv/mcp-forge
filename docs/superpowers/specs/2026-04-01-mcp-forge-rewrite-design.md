@@ -2,9 +2,24 @@
 
 ## Overview
 
-MCP-Forge is a CLI tool that scaffolds MCP server projects with sane defaults and helps developers run, test, and install them into MCP clients. It replaces the current 15K LOC "dynamic server generator" with a focused ~500 LOC scaffolding tool.
+MCP-Forge is a CLI tool that scaffolds MCP server projects with sane defaults and registers them in MCP client apps. It replaces the current 15K LOC "dynamic server generator" with a focused ~400 LOC scaffolding tool.
 
-**Philosophy:** FastMCP already makes writing MCP servers easy. MCP-Forge packages the "getting started" experience — the right project structure, the right config, the right dev workflow. Then it gets out of the way.
+**Philosophy:** FastMCP already makes writing MCP servers easy. The `mcp` CLI already handles `dev` (inspector) and `run`. MCP-Forge fills the two gaps: **scaffolding** (no `mcp create` exists) and **multi-client installation** (`mcp install` only targets Claude Desktop).
+
+## Relationship to the `mcp` CLI
+
+The `mcp` package (v1.26.0, via `pip install mcp[cli]`) ships with:
+
+| `mcp` command | What it does |
+|---------------|-------------|
+| `mcp dev server.py` | Runs server with MCP Inspector |
+| `mcp run server.py` | Runs server directly |
+| `mcp install server.py` | Registers in Claude Desktop only |
+
+**MCP-Forge does NOT duplicate these.** Instead:
+- `mcp-forge new` fills the scaffolding gap — `mcp` has no `create`/`init`/`new` command
+- `mcp-forge install` extends `mcp install` to support multiple clients (Cursor, Windsurf, Claude Code, VS Code)
+- The generated README tells users to use `mcp dev` for the inspector
 
 ## Commands
 
@@ -22,28 +37,34 @@ cd my-server
 ```
 my-server/
   server.py           # FastMCP server with one example tool
-  pyproject.toml       # Package config with fastmcp dependency
+  pyproject.toml       # Package config with mcp[cli] dependency
   .env.example         # Environment variable template
-  README.md            # Quick start instructions
+  README.md            # Quick start instructions (mentions mcp dev)
   tests/
     test_server.py     # Basic test using mcp SDK client
   .gitignore           # Python defaults + .env
 ```
 
-**server.py contents (example):**
+**server.py contents:**
 
 ```python
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("my-server", description="My MCP server")
 
+
 @mcp.tool()
 def hello(name: str) -> str:
     """Say hello to someone."""
     return f"Hello, {name}!"
 
-if __name__ == "__main__":
+
+def main():
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 **pyproject.toml contents:**
@@ -58,6 +79,13 @@ dependencies = [
     "mcp[cli]>=1.6.0",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "anyio>=4.0.0",
+    "pytest-anyio>=0.0.0",
+]
+
 [project.scripts]
 my-server = "server:main"
 
@@ -69,25 +97,32 @@ build-backend = "hatchling.build"
 **test_server.py contents:**
 
 ```python
+from pathlib import Path
+
 import pytest
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+SERVER_PATH = str(Path(__file__).parent.parent / "server.py")
+
+
 @pytest.fixture
 async def client():
     server_params = StdioServerParameters(
-        command="python",
-        args=["server.py"],
+        command="python3",
+        args=[SERVER_PATH],
     )
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             yield session
 
+
 @pytest.mark.anyio
 async def test_hello(client):
     result = await client.call_tool("hello", {"name": "World"})
     assert "Hello, World!" in result.content[0].text
+
 
 @pytest.mark.anyio
 async def test_list_tools(client):
@@ -96,49 +131,21 @@ async def test_list_tools(client):
     assert "hello" in tool_names
 ```
 
+**Edge cases:**
+- If `./my-server/` already exists, refuse with a clear error. No `--force` in v1 — just tell the user to pick a different name or remove the directory.
+- Name validation: must be a valid directory name and Python-safe. Allow `[a-zA-Z0-9_-]+`, minimum 1 character. Hyphens in directory names are fine; the `pyproject.toml` uses the name as-is (PEP 625 allows hyphens). The entry point key uses the hyphenated name too.
+
 **Options:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--description` / `-d` | Server description | "An MCP server" |
-| `--transport` | Transport type: `stdio` or `sse` | `stdio` |
 
-Stdio is the default because it's what most MCP clients expect and requires zero network configuration.
-
-### `mcp-forge dev`
-
-Runs the MCP server in development mode with the MCP Inspector attached.
-
-```bash
-cd my-server
-mcp-forge dev
-```
-
-**What it does:**
-
-1. Starts the MCP server via `python server.py`
-2. Launches `npx @modelcontextprotocol/inspector` pointed at the server process
-3. Opens the inspector UI URL in the default browser
-4. Watches `server.py` for changes and restarts the server (using `watchfiles` or similar)
-
-**Implementation detail:** The inspector already handles stdio transport natively — `npx @modelcontextprotocol/inspector python server.py` does the right thing. So `mcp-forge dev` is essentially a wrapper that:
-- Checks that `npx` is available (warn if not, fall back to running server only)
-- Passes the right command to the inspector
-- Adds file watching for hot-reload (restarts the inspector process on file changes)
-
-**Options:**
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--no-inspector` | Run server only, skip inspector | false |
-| `--port` | Inspector UI port | 5173 |
-| `--no-open` | Don't auto-open browser | false |
-
-**Prerequisites:** Node.js/npx must be installed for the inspector. If not found, `mcp-forge dev` prints a clear message and falls back to running the server directly with `python server.py`.
+No `--transport` flag in v1. Stdio only — it's what all clients expect. SSE support deferred to future version.
 
 ### `mcp-forge install`
 
-Registers the current MCP server in one or more MCP client configurations.
+Registers the current project's MCP server in one or more client configurations.
 
 ```bash
 cd my-server
@@ -151,25 +158,29 @@ mcp-forge install --client cursor  # just Cursor
 
 | Client | Config file location | Format |
 |--------|---------------------|--------|
-| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS), `%APPDATA%/Claude/claude_desktop_config.json` (Windows), `~/.config/Claude/claude_desktop_config.json` (Linux) | JSON |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS), `$APPDATA/Claude/claude_desktop_config.json` (Windows), `~/.config/Claude/claude_desktop_config.json` (Linux) | JSON |
 | Cursor | `~/.cursor/mcp.json` | JSON |
-| Claude Code | `~/.claude.json` or project `.mcp.json` | JSON |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | JSON |
+| Claude Code | project-level `.mcp.json` | JSON |
+
+Note: Windows `%APPDATA%` is resolved via `os.environ.get('APPDATA')` or `Path.home() / 'AppData/Roaming'`, not shell expansion.
 
 **What it writes:**
 
-For a stdio server in `/home/user/my-server`:
+For a project in `/home/user/my-server`:
 
 ```json
 {
   "mcpServers": {
     "my-server": {
-      "command": "python",
+      "command": "python3",
       "args": ["/home/user/my-server/server.py"]
     }
   }
 }
 ```
+
+The `command` uses `python3` by default. If running inside a virtual environment, it detects this and uses the absolute path to the venv's Python interpreter instead, so the server works regardless of which shell the client spawns.
 
 **Behavior:**
 - Auto-detects which clients are installed by checking if config files/directories exist
@@ -186,7 +197,8 @@ For a stdio server in `/home/user/my-server`:
 | `--client` / `-c` | Target a specific client | auto-detect all |
 | `--name` | Override the server name in config | project directory name |
 | `--force` | Overwrite existing entries without prompting | false |
-| `--uninstall` | Remove the server from client configs | false |
+
+No `--uninstall` in v1. Users can remove entries manually — it's a one-line JSON edit.
 
 ## Package Structure
 
@@ -198,9 +210,8 @@ mcp-forge/
   src/
     mcp_forge/
       __init__.py        # version
-      cli.py             # click/typer CLI entry point (~150 lines)
+      cli.py             # typer CLI entry point (~100 lines)
       scaffold.py        # project generation (~100 lines)
-      dev.py             # dev server + inspector launcher (~80 lines)
       install.py         # client config management (~150 lines)
       templates/         # embedded template files
         server.py.tpl
@@ -212,22 +223,20 @@ mcp-forge/
   tests/
     test_scaffold.py
     test_install.py
-    test_dev.py
 ```
 
-**Estimated total:** ~500 lines of application code.
+**Estimated total:** ~350 lines of application code.
 
 ## Dependencies
 
 ```toml
 dependencies = [
-    "typer>=0.9.0",        # CLI framework
-    "rich>=13.0.0",        # Terminal output
-    "watchfiles>=0.20.0",  # File watching for dev mode
+    "typer>=0.16.0",       # CLI framework (matches mcp[cli] typer version)
+    "rich>=13.0.0",        # Terminal output (typer dependency anyway)
 ]
 ```
 
-Minimal. No FastMCP dependency in the CLI itself — it only appears in the generated project's deps.
+No FastMCP dependency in the CLI itself — it only appears in the generated project's deps. No `watchfiles` needed since we dropped the `dev` command.
 
 ## Distribution
 
@@ -253,17 +262,20 @@ We keep: the repo, the git history, the README (rewritten), the LICENSE.
 
 - TypeScript server scaffolding (`mcp-forge new --lang typescript`)
 - Additional templates (`mcp-forge new --template api-wrapper`)
+- `mcp-forge dev` — wrapper around `mcp dev` with file watching / hot-reload
 - `mcp-forge test` — run the generated tests
 - `mcp-forge publish` — package for distribution
+- `--transport sse` flag for `new` command
+- `--uninstall` flag for `install` command
 - Community template registry
 
 These are documented here for direction but explicitly excluded from the initial build.
 
 ## Success Criteria
 
-1. `pip install mcp-forge && mcp-forge new my-server && cd my-server && mcp-forge dev` works end-to-end in under 30 seconds
+1. `pip install mcp-forge && mcp-forge new my-server && cd my-server && mcp dev server.py` works end-to-end
 2. Generated project is a valid, runnable MCP server out of the box
-3. Generated tests pass out of the box
+3. Generated tests pass out of the box (`pip install -e ".[test]" && pytest`)
 4. `mcp-forge install` correctly modifies at least Claude Desktop and Cursor configs
-5. The entire CLI is under 600 lines of code
+5. The entire CLI is under 500 lines of code
 6. Zero configuration required for basic usage
