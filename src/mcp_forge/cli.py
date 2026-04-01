@@ -118,9 +118,9 @@ def install(
     # Report
     if installed:
         rprint(f"\n[green]Installed '{server_name}' in:[/green]")
-        for name in installed:
-            rprint(f"  [green]✓[/green] {name}")
+        for client_name in installed:
+            rprint(f"  [green]✓[/green] {client_name}")
     if skipped:
         rprint(f"\n[yellow]Skipped (already exists, use --force to overwrite):[/yellow]")
-        for name in skipped:
-            rprint(f"  [yellow]–[/yellow] {name}")
+        for client_name in skipped:
+            rprint(f"  [yellow]–[/yellow] {client_name}")

@@ -29,24 +29,30 @@ def _get_claude_desktop_config_path() -> Path:
         return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
 
 
-CLIENTS: Dict[str, Client] = {
-    "claude": Client(
-        name="Claude Desktop",
-        config_path=_get_claude_desktop_config_path(),
-    ),
-    "cursor": Client(
-        name="Cursor",
-        config_path=Path.home() / ".cursor" / "mcp.json",
-    ),
-    "windsurf": Client(
-        name="Windsurf",
-        config_path=Path.home() / ".codeium" / "windsurf" / "mcp_config.json",
-    ),
-    "claude-code": Client(
-        name="Claude Code",
-        config_path=Path.cwd() / ".mcp.json",
-    ),
-}
+def _get_clients() -> Dict[str, Client]:
+    """Build the clients dict. Called lazily to resolve Path.cwd() at call time."""
+    return {
+        "claude": Client(
+            name="Claude Desktop",
+            config_path=_get_claude_desktop_config_path(),
+        ),
+        "cursor": Client(
+            name="Cursor",
+            config_path=Path.home() / ".cursor" / "mcp.json",
+        ),
+        "windsurf": Client(
+            name="Windsurf",
+            config_path=Path.home() / ".codeium" / "windsurf" / "mcp_config.json",
+        ),
+        "claude-code": Client(
+            name="Claude Code",
+            config_path=Path.cwd() / ".mcp.json",
+        ),
+    }
+
+
+# Module-level reference for test patching
+CLIENTS: Dict[str, Client] = {}
 
 
 def _in_virtualenv() -> bool:
@@ -92,10 +98,12 @@ def detect_clients(specific: Optional[str] = None) -> Dict[str, Client]:
     Returns:
         Dict of client_key -> Client for found clients.
     """
+    clients = CLIENTS or _get_clients()
+
     if specific:
-        if specific not in CLIENTS:
+        if specific not in clients:
             return {}
-        client = CLIENTS[specific]
+        client = clients[specific]
         # For claude-code, the config is project-level so always "available"
         if specific == "claude-code":
             return {specific: client}
@@ -104,7 +112,7 @@ def detect_clients(specific: Optional[str] = None) -> Dict[str, Client]:
         return {}
 
     found = {}
-    for key, client in CLIENTS.items():
+    for key, client in clients.items():
         if key == "claude-code":
             # Project-level config, always available
             found[key] = client
