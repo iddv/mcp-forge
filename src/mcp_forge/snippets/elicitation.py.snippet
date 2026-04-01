@@ -1,0 +1,29 @@
+
+# --- MCP Elicitation: ask the user for input mid-tool ---
+# Elicitation lets tools pause and ask the user a question.
+# See: https://modelcontextprotocol.io/docs/concepts/elicitation
+from pydantic import BaseModel, Field
+from mcp.server.fastmcp import Context
+
+
+class UserFeedback(BaseModel):
+    """Schema for user feedback elicitation."""
+
+    message: str = Field(description="Your feedback message")
+    rating: int = Field(description="Rating from 1 to 5", ge=1, le=5)
+
+
+@mcp.tool()
+async def collect_feedback(ctx: Context) -> str:
+    """Collect feedback from the user interactively."""
+    result = await ctx.elicit(
+        message="We'd love your feedback! Please fill in the form below.",
+        schema=UserFeedback,
+    )
+
+    if result.action == "accept":
+        return f"Thanks! You rated us {result.data.rating}/5: {result.data.message}"
+    elif result.action == "decline":
+        return "No worries, maybe next time!"
+    else:
+        return "Feedback cancelled."

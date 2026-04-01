@@ -1,0 +1,10 @@
+
+# --- MCP Prompt: summarize ---
+# Prompts are reusable templates that clients can invoke.
+# See: https://modelcontextprotocol.io/docs/concepts/prompts
+
+
+@mcp.prompt(description="Summarize the given text")
+def summarize(text: str, style: str = "concise") -> str:
+    """Generate a prompt to summarize text in the given style."""
+    return f"Please summarize the following text in a {style} style:\n\n{text}"

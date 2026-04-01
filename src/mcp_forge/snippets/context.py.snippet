@@ -1,0 +1,23 @@
+
+# --- MCP Context: logging and progress reporting ---
+# The Context object gives tools access to logging and progress reporting.
+# See: https://modelcontextprotocol.io/docs/concepts/tools
+import asyncio
+from mcp.server.fastmcp import Context
+
+
+@mcp.tool()
+async def process_data(items: list[str], ctx: Context) -> str:
+    """Process a list of items with progress reporting and logging."""
+    total = len(items)
+    ctx.info(f"Starting to process {total} items")
+
+    results = []
+    for i, item in enumerate(items):
+        await ctx.report_progress(i, total, f"Processing: {item}")
+        # Simulate work
+        await asyncio.sleep(0.1)
+        results.append(item.upper())
+
+    ctx.info(f"Finished processing {total} items")
+    return f"Processed {total} items: {', '.join(results)}"

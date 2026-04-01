@@ -1,0 +1,20 @@
+
+# --- MCP Auth: OAuth 2.0 resource server ---
+# Validates bearer tokens from an external OAuth provider.
+# See: https://modelcontextprotocol.io/docs/concepts/transports#authentication
+#
+# To use auth, update the FastMCP constructor at the top of this file:
+#
+#   from mcp.server.auth.settings import AuthSettings
+#
+#   mcp = FastMCP(
+#       "{{name}}",
+#       auth=AuthSettings(
+#           issuer_url="https://your-auth-provider.com",
+#           resource_server_url="https://your-server.com",
+#           required_scopes=["read", "write"],
+#       ),
+#   )
+#
+# Then run with HTTP transport instead of stdio:
+#   mcp.run(transport="streamable-http")

@@ -1,0 +1,17 @@
+
+# --- MCP Resource: config ---
+# Resources expose data that clients can read.
+# See: https://modelcontextprotocol.io/docs/concepts/resources
+
+
+@mcp.resource("config://app", description="Application configuration")
+def get_config() -> str:
+    """Return application configuration as JSON."""
+    import json
+
+    config = {
+        "version": "0.1.0",
+        "debug": False,
+        "log_level": "info",
+    }
+    return json.dumps(config, indent=2)
