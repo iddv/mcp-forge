@@ -12,6 +12,7 @@ from mcp_forge.install import (
     get_server_entry,
     install_in_client,
     get_python_command,
+    list_clients,
 )
 
 
@@ -146,3 +147,75 @@ class TestInstallInClient:
 
         assert result is True
         assert config_path.exists()
+
+    def test_custom_config_key(self, tmp_path):
+        config_path = tmp_path / "mcp.json"
+        client = Client(name="VS Code", config_path=config_path, config_key="servers")
+        entry = {"command": "python3", "args": ["/path/to/server.py"]}
+
+        install_in_client(client, "my-server", entry, force=False)
+
+        config = json.loads(config_path.read_text())
+        assert "servers" in config
+        assert "my-server" in config["servers"]
+        assert "mcpServers" not in config
+
+    def test_custom_config_key_existing(self, tmp_path):
+        config_path = tmp_path / "settings.json"
+        config_path.write_text(json.dumps({
+            "context_servers": {"old": {}},
+            "other_setting": True,
+        }))
+        client = Client(name="Zed", config_path=config_path, config_key="context_servers")
+        entry = {"command": "python3", "args": ["/path/to/server.py"]}
+
+        install_in_client(client, "my-server", entry, force=False)
+
+        config = json.loads(config_path.read_text())
+        assert "old" in config["context_servers"]
+        assert "my-server" in config["context_servers"]
+        assert config["other_setting"] is True
+
+
+class TestDetectProjectLevel:
+    def test_project_level_always_detected(self, tmp_path):
+        with patch("mcp_forge.install.CLIENTS", {
+            "claude-code": Client(
+                name="Claude Code",
+                config_path=tmp_path / ".mcp.json",
+                project_level=True,
+            ),
+        }):
+            found = detect_clients()
+            assert "claude-code" in found
+
+    def test_project_level_specific(self, tmp_path):
+        with patch("mcp_forge.install.CLIENTS", {
+            "vscode": Client(
+                name="VS Code",
+                config_path=tmp_path / ".vscode" / "mcp.json",
+                project_level=True,
+            ),
+        }):
+            found = detect_clients(specific="vscode")
+            assert "vscode" in found
+
+
+class TestListClients:
+    def test_returns_all_clients(self):
+        clients = list_clients()
+        assert len(clients) >= 12
+        assert "claude" in clients
+        assert "cursor" in clients
+        assert "vscode" in clients
+        assert "kiro" in clients
+        assert "zed" in clients
+        assert "jetbrains" in clients
+        assert "claude-code" in clients
+        assert "continue" in clients
+        assert "cline" in clients
+        assert "amazon-q" in clients
+
+    def test_returns_sorted(self):
+        clients = list_clients()
+        assert clients == sorted(clients)

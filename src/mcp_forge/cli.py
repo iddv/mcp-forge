@@ -9,7 +9,7 @@ from rich.panel import Panel
 from mcp_forge import __version__
 from mcp_forge.add import add_feature, list_features
 from mcp_forge.scaffold import scaffold_project, validate_name
-from mcp_forge.install import detect_clients, get_server_entry, install_in_client
+from mcp_forge.install import detect_clients, get_server_entry, install_in_client, list_clients
 
 app = typer.Typer(
     name="mcp-forge",
@@ -117,7 +117,7 @@ def install(
         clients = detect_clients(specific=client)
         if not clients:
             rprint(f"[red]Client not found:[/red] {client}")
-            rprint(f"Available clients: claude, cursor, windsurf, claude-code")
+            rprint(f"Available clients: {', '.join(list_clients())}")
             raise typer.Exit(1)
     else:
         clients = detect_clients()
