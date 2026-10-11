@@ -1,0 +1,18 @@
+
+# --- mcp-forge:http ---
+# Streamable HTTP settings, read from the environment so the same values are
+# available when the server object is built (auth URLs, request state).
+# See: https://modelcontextprotocol.io/specification/latest/basic/transports
+import os
+
+from mcp.server.mcpserver import RequestStateSecurity
+
+MCP_HOST = os.environ.get("MCP_HOST", "127.0.0.1")
+MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
+
+# Elicitation/sampling/roots on 2026-07-28 connections round-trip an encrypted
+# requestState through the client. Set MCP_REQUEST_STATE_KEY (same value on
+# every replica) when running more than one instance; otherwise a
+# process-local key is used.
+_request_state_key = os.environ.get("MCP_REQUEST_STATE_KEY")
+REQUEST_STATE_SECURITY = RequestStateSecurity(keys=[_request_state_key]) if _request_state_key else None

@@ -1,0 +1,39 @@
+
+# --- mcp-forge:notifications ---
+# Servers can tell clients when things change: a resource's content was
+# updated, or the list of tools/prompts/resources changed (e.g. a tool that is
+# only enabled later). Clients refetch when notified.
+# See: https://modelcontextprotocol.io/specification/latest/server/resources#subscriptions
+from mcp.server.mcpserver import Context
+
+_counter = {"value": 0}
+
+
+@mcp.resource("counter://value", title="Counter", description="A counter that tools update")
+def counter_value() -> str:
+    """The current counter value."""
+    return str(_counter["value"])
+
+
+@mcp.tool()
+async def increment_counter(ctx: Context) -> str:
+    """Increment the counter and notify subscribers of counter://value."""
+    _counter["value"] += 1
+    await ctx.notify_resource_updated("counter://value")
+    return f"Counter is now {_counter['value']}"
+
+
+def reset_counter() -> str:
+    """Reset the counter to zero."""
+    _counter["value"] = 0
+    return "Counter reset"
+
+
+@mcp.tool()
+async def enable_admin_tools(ctx: Context) -> str:
+    """Enable the admin tools (adds reset_counter) and notify clients."""
+    if "reset_counter" in {tool.name for tool in await mcp.list_tools()}:
+        return "Admin tools already enabled"
+    mcp.add_tool(reset_counter)
+    await ctx.notify_tools_changed()
+    return "Admin tools enabled: reset_counter"

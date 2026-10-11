@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import anyio
 import pytest
 
 mcp = pytest.importorskip("mcp")
@@ -97,7 +98,7 @@ async def test_all_tools_listed(client):
     assert {
         "hello", "process_data", "collect_feedback", "read_note", "delete_note", "get_weather",
         "write_haiku", "list_workspace_roots", "cache_put", "cache_get", "render_chart",
-        "generate_report", "show_dashboard",
+        "generate_report", "show_dashboard", "order_status", "increment_counter", "enable_admin_tools",
     } <= names
 
 
@@ -192,6 +193,41 @@ async def test_apps(client):
     assert "<h1>forge-test</h1>" in html.contents[0].text
 
 
+@pytest.mark.anyio
+async def test_tool_errors(client):
+    ok = await client.call_tool("order_status", {"order_id": "A-100"})
+    assert _text(ok) == "Order A-100 is shipped."
+    bad = await client.call_tool("order_status", {"order_id": "B-1"})
+    assert bad.is_error
+    assert "IDs look like 'A-100'" in bad.content[0].text
+
+
+@pytest.mark.anyio
+async def test_notifications(server):
+    async with Client(server) as client:  # subscriptions/listen is 2026-07-28 only
+        async with client.listen(resource_subscriptions=["counter://value"]) as sub:
+            await client.call_tool("increment_counter", {})
+            with anyio.fail_after(5):
+                event = await sub.__anext__()
+            assert str(event.uri) == "counter://value"
+        assert (await client.read_resource("counter://value")).contents[0].text == "1"
+
+        async with client.listen(tools_list_changed=True) as sub:
+            assert _text(await client.call_tool("enable_admin_tools", {})).startswith("Admin tools enabled")
+            with anyio.fail_after(5):
+                await sub.__anext__()
+        assert "reset_counter" in {t.name for t in (await client.list_tools()).tools}
+
+
+@pytest.mark.anyio
+async def test_middleware(client, caplog):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="forge-test.requests"):
+        await client.call_tool("hello", {"name": "x"})
+    assert any("tools/call took" in record.getMessage() for record in caplog.records)
+
+
 def test_http_routes(server):
     from starlette.testclient import TestClient
 
@@ -216,3 +252,25 @@ def test_distribution_files(project):
     server_json = json.loads((project / "server.json").read_text())
     assert server_json["packages"][0]["identifier"] == "forge-test"
     assert "<!-- mcp-name: " in (project / "README.md").read_text()
+    assert 'CMD ["python", "server.py", "--http"]' in (project / "Dockerfile").read_text()
+
+
+def test_auth_urls_follow_host_and_port(tmp_path, monkeypatch):
+    """The advertised resource URL must match where the server actually listens."""
+    from starlette.testclient import TestClient
+
+    project_dir = scaffold_project("auth-port", str(tmp_path))
+    add_feature("auth", project_dir)
+    monkeypatch.setenv("MCP_PORT", "9123")
+    spec = importlib.util.spec_from_file_location("auth_port_server", project_dir / "server.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.RESOURCE_SERVER_URL == "http://127.0.0.1:9123/mcp"
+    with TestClient(module.mcp.streamable_http_app()) as http:
+        prm = http.get("/.well-known/oauth-protected-resource/mcp").json()
+    assert prm["resource"] == "http://127.0.0.1:9123/mcp"
+
+    monkeypatch.setenv("MCP_PUBLIC_URL", "https://mcp.example.com/")
+    spec.loader.exec_module(module)
+    assert module.RESOURCE_SERVER_URL == "https://mcp.example.com/mcp"

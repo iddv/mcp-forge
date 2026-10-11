@@ -1,0 +1,21 @@
+
+# --- mcp-forge:errors ---
+# Raise ToolError for failures you expect (bad input, missing records): the
+# call returns isError=True with your message, so the model can read it and
+# recover. Any other exception counts as a crash, and the model only sees a
+# generic "Error executing tool".
+# See: https://modelcontextprotocol.io/specification/latest/server/tools#error-handling
+from mcp.server.mcpserver.exceptions import ToolError
+
+_ORDERS = {"A-100": "shipped", "A-101": "processing"}
+
+
+@mcp.tool()
+def order_status(order_id: str) -> str:
+    """Look up the status of an order by ID (e.g. A-100)."""
+    if not order_id.startswith("A-"):
+        raise ToolError(f"Invalid order ID {order_id!r}: IDs look like 'A-100'.")
+    status = _ORDERS.get(order_id)
+    if status is None:
+        raise ToolError(f"No order {order_id!r}. Known orders: {', '.join(_ORDERS)}.")
+    return f"Order {order_id} is {status}."

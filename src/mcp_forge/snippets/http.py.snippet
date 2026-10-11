@@ -1,8 +1,7 @@
 
-# --- mcp-forge:http ---
-# Streamable HTTP transport: run `python server.py --http` and connect clients
-# to http://127.0.0.1:8000/mcp. A /health route is added for load balancers.
-# See: https://modelcontextprotocol.io/specification/latest/basic/transports
+# --- mcp-forge:http-routes ---
+# Run `python server.py --http` (MCP_HOST / MCP_PORT to change the address) and
+# connect clients to http://<host>:<port>/mcp. /health is for load balancers.
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 

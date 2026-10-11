@@ -202,7 +202,10 @@ def write_mcpb(project_dir: Path) -> List[Path]:
         ],
         "compatibility": {"platforms": ["darwin", "linux", "win32"]},
     }
-    ignore = ".venv/\n__pycache__/\n.pytest_cache/\ntests/\n.env\n*.mcpb\n"
+    ignore = (
+        ".venv/\n__pycache__/\n.pytest_cache/\ntests/\n.env\n*.mcpb\n"
+        ".claude-plugin/\nskills/\nDockerfile\n.dockerignore\nserver.json\n"
+    )
     created: List[Path] = []
     _write_new(project_dir / "manifest.json", _json(manifest), created)
     _write_new(project_dir / ".mcpbignore", ignore, created)
@@ -242,4 +245,32 @@ def write_registry(project_dir: Path) -> List[Path]:
     marker = f"<!-- mcp-name: {registry_name} -->"
     if readme.exists() and "mcp-name:" not in readme.read_text():
         readme.write_text(readme.read_text().rstrip("\n") + f"\n\n{marker}\n")
+    return created
+
+
+def write_docker(project_dir: Path) -> List[Path]:
+    """Write a Dockerfile (uv-based) that serves the server over Streamable HTTP."""
+    dockerfile = """FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1
+
+# Install dependencies first so they are cached between code changes
+COPY pyproject.toml ./
+RUN uv pip install --system --no-cache -r pyproject.toml
+COPY . .
+
+# Listen on all interfaces inside the container. With auth, set MCP_PUBLIC_URL
+# to the URL clients use (e.g. https://mcp.example.com).
+ENV MCP_HOST=0.0.0.0 MCP_PORT=8000
+EXPOSE 8000
+HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+
+USER nobody
+CMD ["python", "server.py", "--http"]
+"""
+    ignore = ".venv/\n__pycache__/\n*.py[cod]\n.pytest_cache/\n.env\n.git/\n*.mcpb\n"
+    created: List[Path] = []
+    _write_new(project_dir / "Dockerfile", dockerfile, created)
+    _write_new(project_dir / ".dockerignore", ignore, created)
     return created

@@ -20,15 +20,16 @@ DEFAULT_MAIN = "def main():\n    mcp.run()\n"
 HTTP_MAIN = '''def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description=mcp.instructions)
+    parser = argparse.ArgumentParser(
+        description=mcp.instructions,
+        epilog="HTTP address: set MCP_HOST and MCP_PORT (default 127.0.0.1:8000).",
+    )
     parser.add_argument("--http", action="store_true", help="Serve over Streamable HTTP instead of stdio")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--stateless", action="store_true", help="Stateless HTTP (horizontal scaling)")
     args = parser.parse_args()
 
     if args.http:
-        mcp.run(transport="streamable-http", host=args.host, port=args.port, stateless_http=args.stateless)
+        mcp.run(transport="streamable-http", host=MCP_HOST, port=MCP_PORT, stateless_http=args.stateless)
     else:
         mcp.run()
 '''
@@ -83,6 +84,14 @@ FEATURES: Dict[str, Feature] = {
         snippet="media.py.snippet",
         description="Image content and resource links in tool results",
     ),
+    "errors": Feature(
+        snippet="errors.py.snippet",
+        description="ToolError for expected failures the model can read and recover from",
+    ),
+    "notifications": Feature(
+        snippet="notifications.py.snippet",
+        description="Resource-updated and tools-list-changed notifications (dynamic tools)",
+    ),
     "context": Feature(
         snippet="context.py.snippet",
         description="Progress reporting and logging via the request context",
@@ -106,10 +115,17 @@ FEATURES: Dict[str, Feature] = {
         server_kwargs={"lifespan": "app_lifespan"},
         description="Startup/shutdown resources shared with every request",
     ),
+    "middleware": Feature(
+        pre_snippet="middleware.py.snippet",
+        server_kwargs={"middleware": "[timing_middleware]"},
+        description="Request middleware (timing/audit logging) around every MCP request",
+    ),
     "http": Feature(
+        pre_snippet="http_settings.py.snippet",
         snippet="http.py.snippet",
+        server_kwargs={"request_state_security": "REQUEST_STATE_SECURITY"},
         main=HTTP_MAIN,
-        description="Streamable HTTP transport (--http) with a /health route",
+        description="Streamable HTTP transport (--http), /health route, multi-replica request state",
     ),
     "auth": Feature(
         pre_snippet="auth.py.snippet",
@@ -148,6 +164,12 @@ FEATURES: Dict[str, Feature] = {
         generator=distribute.write_mcpb,
         kind="distribution",
         description="MCP Bundle manifest.json for one-click Claude Desktop install",
+    ),
+    "docker": Feature(
+        generator=distribute.write_docker,
+        requires=["http"],
+        kind="distribution",
+        description="Dockerfile serving the server over Streamable HTTP",
     ),
     "registry": Feature(
         generator=distribute.write_registry,

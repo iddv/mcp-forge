@@ -4,14 +4,16 @@
 # external authorization server and advertises it via Protected Resource
 # Metadata (RFC 9728). Auth only applies to the HTTP transport (--http).
 # See: https://modelcontextprotocol.io/specification/latest/basic/authorization
-import os
 import secrets
 
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 
 AUTH_ISSUER_URL = os.environ.get("MCP_AUTH_ISSUER_URL", "https://auth.example.com")
-RESOURCE_SERVER_URL = os.environ.get("MCP_RESOURCE_SERVER_URL", "http://127.0.0.1:8000/mcp")
+# The URL clients use to reach this server. Set MCP_PUBLIC_URL when running
+# behind a proxy or on 0.0.0.0 (e.g. https://mcp.example.com).
+PUBLIC_URL = os.environ.get("MCP_PUBLIC_URL", f"http://{MCP_HOST}:{MCP_PORT}").rstrip("/")
+RESOURCE_SERVER_URL = f"{PUBLIC_URL}/mcp"
 
 
 class EnvTokenVerifier(TokenVerifier):

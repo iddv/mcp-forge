@@ -1,6 +1,6 @@
 from mcp.server.mcpserver import MCPServer
 
-mcp = MCPServer("{{name}}", instructions="{{description}}")
+mcp = MCPServer("{{name}}", instructions="{{description}}", version="0.1.0")
 
 
 @mcp.tool()

@@ -1,0 +1,19 @@
+
+# --- mcp-forge:middleware ---
+# Middleware wraps every request (tools/call, resources/read, ...): use it for
+# timing, audit logging, rate limiting, or rejecting requests.
+# See: https://py.sdk.modelcontextprotocol.io/
+import logging
+import time
+
+_request_log = logging.getLogger("{{name}}.requests")
+
+
+async def timing_middleware(ctx, call_next):
+    """Log the method and duration of every request."""
+    start = time.perf_counter()
+    try:
+        return await call_next(ctx)
+    finally:
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        _request_log.info("%s took %.1fms", ctx.method, elapsed_ms)
