@@ -27,6 +27,6 @@ pytest
 ## Install in MCP clients
 
 ```bash
-# Requires mcp-forge: pip install mcp-forge
+# Requires mcp-forge: uv tool install git+https://github.com/iddv/mcp-forge
 mcp-forge install
 ```

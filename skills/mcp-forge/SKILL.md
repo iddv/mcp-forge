@@ -11,7 +11,7 @@ protocol revision 2026-07-28, backwards compatible with handshake-era clients).
 
 ## Setup
 
-If `mcp-forge --version` fails, install it with `uv tool install mcp-forge`, falling back to `pipx install mcp-forge`.
+If `mcp-forge --version` fails, install it from GitHub with `uv tool install git+https://github.com/iddv/mcp-forge`, falling back to `pipx install git+https://github.com/iddv/mcp-forge`. Don't `pip install mcp-forge`: that PyPI package is an unrelated project.
 It needs version 3.0 or later. Older versions generate `FastMCP` code that breaks on `mcp` 2.x.
 
 ## Workflow

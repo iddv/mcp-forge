@@ -7,14 +7,16 @@ Generated servers target the official [`mcp` Python SDK](https://github.com/mode
 
 ## Install
 
+mcp-forge is not on PyPI. The `mcp-forge` package there is an unrelated project, so install from GitHub:
+
 ```bash
-pip install mcp-forge
+uv tool install git+https://github.com/iddv/mcp-forge
 ```
 
 or
 
 ```bash
-pipx install mcp-forge
+pipx install git+https://github.com/iddv/mcp-forge
 ```
 
 ## Quick Start
