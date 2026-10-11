@@ -5,7 +5,7 @@
 ## Setup
 
 ```bash
-pip install -e .
+pip install -e ".[test]"
 ```
 
 ## Run
@@ -14,20 +14,19 @@ pip install -e .
 # Run with MCP Inspector
 mcp dev server.py
 
-# Run directly
+# Run directly (stdio)
 python server.py
 ```
 
 ## Test
 
 ```bash
-pip install -e ".[test]"
 pytest
 ```
 
 ## Install in MCP clients
 
 ```bash
-# Requires mcp-forge: pip install mcp-forge
+# Requires mcp-forge: uv tool install git+https://github.com/iddv/mcp-forge
 mcp-forge install
 ```

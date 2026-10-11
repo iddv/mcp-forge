@@ -1,7 +1,7 @@
 [project]
 name = "mcp-forge"
-version = "2.0.0"
-description = "Scaffold MCP server projects with sane defaults"
+version = "3.0.0"
+description = "Scaffold, extend, and distribute MCP servers"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -14,7 +14,8 @@ dependencies = [
 test = [
     "pytest>=7.0.0",
     "anyio>=4.0.0",
-    "pytest-anyio>=0.0.0",
+    # Integration tests run generated servers against the real SDK
+    "mcp[cli]>=2.3,<3",
 ]
 
 [project.scripts]

@@ -1,0 +1,15 @@
+{
+  "name": "mcp-forge",
+  "owner": {
+    "name": "Ian de Villiers"
+  },
+  "description": "mcp-forge: build MCP servers with Claude",
+  "plugins": [
+    {
+      "name": "mcp-forge",
+      "source": "./",
+      "description": "Scaffold, extend, test, and distribute MCP servers with mcp-forge",
+      "category": "development"
+    }
+  ]
+}

@@ -2,20 +2,42 @@ from pathlib import Path
 
 import pytest
 
-from mcp_forge.add import add_feature, list_features
+from mcp_forge.add import FEATURES, add_feature, list_features
 
 
 class TestListFeatures:
     def test_returns_all_features(self):
         features = list_features()
-        assert len(features) == 5
         assert set(features.keys()) == {
             "resources",
+            "resource-templates",
             "prompts",
-            "elicitation",
+            "completions",
+            "annotations",
+            "structured-output",
+            "media",
+            "errors",
+            "notifications",
             "context",
+            "elicitation",
+            "sampling",
+            "roots",
+            "lifespan",
+            "middleware",
+            "http",
             "auth",
+            "apps",
+            "skill",
+            "plugin",
+            "mcpb",
+            "docker",
+            "registry",
         }
+
+    def test_requires_reference_known_features(self):
+        for name, feat in list_features().items():
+            for required in feat.requires:
+                assert required in FEATURES, f"{name} requires unknown {required}"
 
     def test_features_have_descriptions(self):
         for name, feat in list_features().items():
@@ -32,9 +54,9 @@ def _make_project(tmp_path: Path, *, with_main_block: bool = True) -> Path:
     project_dir.mkdir()
 
     server_lines = [
-        'from mcp.server.fastmcp import FastMCP\n',
+        'from mcp.server.mcpserver import MCPServer\n',
         '\n',
-        'mcp = FastMCP("my-server")\n',
+        'mcp = MCPServer("my-server", instructions="Test server")\n',
         '\n',
         '\n',
         '@mcp.tool()\n',
@@ -55,7 +77,7 @@ def _make_project(tmp_path: Path, *, with_main_block: bool = True) -> Path:
         'name = "my-server"\n'
         'version = "0.1.0"\n'
         'dependencies = [\n'
-        '    "mcp[cli]>=1.6.0",\n'
+        '    "mcp[cli]>=2.3,<3",\n'
         ']\n'
     )
     return project_dir
@@ -93,7 +115,7 @@ class TestAddFeature:
             'name = "my-server"\n'
             'version = "0.1.0"\n'
             'dependencies = [\n'
-            '    "mcp[cli]>=1.6.0",\n'
+            '    "mcp[cli]>=2.3,<3",\n'
             '    "pydantic>=2.0.0",\n'
             ']\n'
         )
@@ -136,3 +158,83 @@ class TestAddFeature:
         assert content.index("@mcp.resource") < main_pos
         assert content.index("@mcp.prompt") < main_pos
         assert content.index("process_data") < main_pos
+
+    def test_add_is_idempotent(self, tmp_path):
+        project_dir = _make_project(tmp_path)
+        first = add_feature("prompts", project_dir)
+        second = add_feature("prompts", project_dir)
+        assert first.added == ["prompts"]
+        assert second.added == [] and second.skipped == ["prompts"]
+        assert (project_dir / "server.py").read_text().count("@mcp.prompt") == 1
+
+    def test_required_features_are_added(self, tmp_path):
+        project_dir = _make_project(tmp_path)
+        result = add_feature("auth", project_dir)
+        assert result.added == ["http", "auth"]
+        assert "mcp-forge:http" in (project_dir / "server.py").read_text()
+
+
+class TestServerConstructor:
+    def test_pre_snippet_goes_before_constructor(self, tmp_path):
+        project_dir = _make_project(tmp_path)
+        add_feature("lifespan", project_dir)
+        content = (project_dir / "server.py").read_text()
+        assert content.index("async def app_lifespan") < content.index("mcp = MCPServer(")
+        assert content.index("def cache_get") > content.index("mcp = MCPServer(")
+
+    def test_kwargs_added_and_existing_preserved(self, tmp_path):
+        project_dir = _make_project(tmp_path)
+        add_feature("lifespan", project_dir)
+        add_feature("apps", project_dir)
+        content = (project_dir / "server.py").read_text()
+        assert (
+            'mcp = MCPServer(\n'
+            '    "my-server",\n'
+            '    instructions="Test server",\n'
+            '    lifespan=app_lifespan,\n'
+            '    extensions=[apps],\n'
+            ')\n'
+        ) in content
+
+    def test_kwargs_not_duplicated(self, tmp_path):
+        project_dir = _make_project(tmp_path)
+        server_py = project_dir / "server.py"
+        server_py.write_text(server_py.read_text().replace(
+            'instructions="Test server")', 'instructions="Test server", lifespan=my_lifespan)'
+        ))
+        add_feature("lifespan", project_dir)
+        content = server_py.read_text()
+        assert "lifespan=my_lifespan" in content
+        assert "lifespan=app_lifespan" not in content
+
+    def test_generated_server_is_valid_python(self, tmp_path):
+        import ast
+
+        project_dir = _make_project(tmp_path)
+        for name, feat in FEATURES.items():
+            if feat.kind == "protocol":
+                add_feature(name, project_dir)
+        ast.parse((project_dir / "server.py").read_text())
+
+
+class TestMain:
+    def test_http_replaces_default_main(self, tmp_path):
+        from mcp_forge.scaffold import scaffold_project
+
+        project_dir = scaffold_project("my-server", str(tmp_path))
+        add_feature("http", project_dir)
+        content = (project_dir / "server.py").read_text()
+        assert '"--http"' in content
+        assert 'transport="streamable-http"' in content
+        assert content.count("def main():") == 1
+
+    def test_http_keeps_custom_main(self, tmp_path):
+        from mcp_forge.scaffold import scaffold_project
+
+        project_dir = scaffold_project("my-server", str(tmp_path))
+        server_py = project_dir / "server.py"
+        server_py.write_text(server_py.read_text().replace("    mcp.run()\n", "    mcp.run()  # custom\n"))
+        add_feature("http", project_dir)
+        content = server_py.read_text()
+        assert "# custom" in content
+        assert '"--http"' not in content

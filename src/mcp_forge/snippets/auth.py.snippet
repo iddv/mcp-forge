@@ -1,20 +1,35 @@
 
-# --- MCP Auth: OAuth 2.0 resource server ---
-# Validates bearer tokens from an external OAuth provider.
-# See: https://modelcontextprotocol.io/docs/concepts/transports#authentication
-#
-# To use auth, update the FastMCP constructor at the top of this file:
-#
-#   from mcp.server.auth.settings import AuthSettings
-#
-#   mcp = FastMCP(
-#       "{{name}}",
-#       auth=AuthSettings(
-#           issuer_url="https://your-auth-provider.com",
-#           resource_server_url="https://your-server.com",
-#           required_scopes=["read", "write"],
-#       ),
-#   )
-#
-# Then run with HTTP transport instead of stdio:
-#   mcp.run(transport="streamable-http")
+# --- mcp-forge:auth ---
+# OAuth 2.1 resource server: the server validates bearer tokens issued by an
+# external authorization server and advertises it via Protected Resource
+# Metadata (RFC 9728). Auth only applies to the HTTP transport (--http).
+# See: https://modelcontextprotocol.io/specification/latest/basic/authorization
+import secrets
+
+from mcp.server.auth.provider import AccessToken, TokenVerifier
+from mcp.server.auth.settings import AuthSettings
+
+AUTH_ISSUER_URL = os.environ.get("MCP_AUTH_ISSUER_URL", "https://auth.example.com")
+# The URL clients use to reach this server. Set MCP_PUBLIC_URL when running
+# behind a proxy or on 0.0.0.0 (e.g. https://mcp.example.com).
+PUBLIC_URL = os.environ.get("MCP_PUBLIC_URL", f"http://{MCP_HOST}:{MCP_PORT}").rstrip("/")
+RESOURCE_SERVER_URL = f"{PUBLIC_URL}/mcp"
+
+
+class EnvTokenVerifier(TokenVerifier):
+    """Development verifier: accepts the static token in $MCP_API_TOKEN.
+
+    Replace verify_token with JWT validation or token introspection against
+    your authorization server before going to production.
+    """
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        expected = os.environ.get("MCP_API_TOKEN")
+        if not expected or not secrets.compare_digest(token, expected):
+            return None
+        return AccessToken(
+            token=token,
+            client_id="dev-client",
+            scopes=["mcp:tools"],
+            resource=RESOURCE_SERVER_URL,
+        )

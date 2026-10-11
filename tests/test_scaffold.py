@@ -37,7 +37,8 @@ class TestScaffoldProject:
         server_py = tmp_path / "my-server" / "server.py"
         assert server_py.exists()
         content = server_py.read_text()
-        assert 'FastMCP("my-server"' in content
+        assert 'MCPServer("my-server"' in content
+        assert "from mcp.server.mcpserver import MCPServer" in content
         assert "def main():" in content
 
     def test_creates_pyproject_toml(self, tmp_path):

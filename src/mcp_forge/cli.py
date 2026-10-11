@@ -1,10 +1,12 @@
 """MCP-Forge CLI — scaffold MCP server projects."""
 
 from pathlib import Path
+from typing import List
 
 import typer
 from rich import print as rprint
 from rich.panel import Panel
+from rich.table import Table
 
 from mcp_forge import __version__
 from mcp_forge.add import add_feature, list_features
@@ -43,7 +45,7 @@ def new(
     ),
     with_features: str = typer.Option(
         None, "--with",
-        help="Comma-separated features to add (resources,prompts,elicitation,context,auth).",
+        help="Comma-separated features to add (run `mcp-forge features` to list them).",
     ),
 ):
     """Create a new MCP server project."""
@@ -63,15 +65,8 @@ def new(
     # Add requested features
     added = []
     if with_features:
-        features = list_features()
-        for feature_name in with_features.split(","):
-            feature_name = feature_name.strip()
-            if feature_name not in features:
-                rprint(f"[yellow]Unknown feature:[/yellow] {feature_name}")
-                rprint(f"Available: {', '.join(features)}")
-                continue
-            add_feature(feature_name, project_dir)
-            added.append(feature_name)
+        names = [name.strip() for name in with_features.split(",") if name.strip()]
+        added = _apply_features(names, project_dir)
 
     summary = (
         f"[green]Created MCP server project:[/green] [bold]{name}[/bold]\n\n"
@@ -147,13 +142,42 @@ def install(
             rprint(f"  [yellow]–[/yellow] {client_name}")
 
 
+def _apply_features(names: List[str], project_dir: Path) -> List[str]:
+    """Add features, printing what happened. Returns the features that were added."""
+    features = list_features()
+    if "mcp.server.fastmcp" in (project_dir / "server.py").read_text():
+        rprint(
+            "[yellow]server.py uses FastMCP (mcp 1.x).[/yellow] Snippets target mcp 2.x — "
+            "see https://py.sdk.modelcontextprotocol.io/v2/migration/"
+        )
+
+    added: List[str] = []
+    for feature_name in names:
+        if feature_name not in features:
+            rprint(f"[red]Unknown feature:[/red] {feature_name}")
+            rprint(f"Available: {', '.join(features)}")
+            continue
+        result = add_feature(feature_name, project_dir)
+        for name in result.added:
+            feat = features[name]
+            rprint(f"[green]✓[/green] Added [bold]{name}[/bold] — {feat.description}")
+            if feat.deps:
+                rprint(f"  [dim]Added dependencies: {', '.join(feat.deps)}[/dim]")
+        for path in result.files:
+            rprint(f"  [dim]Created {path.relative_to(project_dir)}[/dim]")
+        if feature_name in result.skipped:
+            rprint(f"[yellow]–[/yellow] [bold]{feature_name}[/bold] is already in this project")
+        added += result.added
+    return added
+
+
 @app.command()
 def add(
-    feature: str = typer.Argument(
-        help="Feature to add (resources, prompts, elicitation, context, auth).",
+    features: List[str] = typer.Argument(
+        help="Features to add (run `mcp-forge features` to list them).",
     ),
 ):
-    """Add an MCP feature to the current server project."""
+    """Add MCP features to the current server project."""
     project_dir = Path.cwd()
 
     if not (project_dir / "server.py").exists():
@@ -161,14 +185,22 @@ def add(
         rprint("Run this command from an MCP server project directory.")
         raise typer.Exit(1)
 
-    features = list_features()
-    if feature not in features:
-        rprint(f"[red]Unknown feature:[/red] {feature}")
-        rprint(f"Available: {', '.join(features)}")
+    unknown = [name for name in features if name not in list_features()]
+    if unknown:
+        rprint(f"[red]Unknown feature:[/red] {', '.join(unknown)}")
+        rprint(f"Available: {', '.join(list_features())}")
         raise typer.Exit(1)
 
-    add_feature(feature, project_dir)
-    feat = features[feature]
-    rprint(f"[green]✓[/green] Added [bold]{feature}[/bold] — {feat.description}")
-    if feat.deps:
-        rprint(f"  [dim]Added dependencies: {', '.join(feat.deps)}[/dim]")
+    _apply_features(features, project_dir)
+
+
+@app.command(name="features")
+def features_command():
+    """List the features available to `mcp-forge add`."""
+    table = Table(box=None, pad_edge=False)
+    table.add_column("Feature", style="bold")
+    table.add_column("Kind", style="dim")
+    table.add_column("What it adds")
+    for name, feat in list_features().items():
+        table.add_row(name, feat.kind, feat.description)
+    rprint(table)

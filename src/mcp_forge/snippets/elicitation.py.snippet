@@ -1,9 +1,14 @@
 
-# --- MCP Elicitation: ask the user for input mid-tool ---
-# Elicitation lets tools pause and ask the user a question.
-# See: https://modelcontextprotocol.io/docs/concepts/elicitation
+# --- mcp-forge:elicitation ---
+# Elicitation lets a tool ask the user for structured input mid-call.
+# A Resolve() parameter is filled by its resolver before the tool runs, so it
+# works on both handshake-era clients and stateless 2026-07-28 clients
+# (Multi Round-Trip Requests). The parameter is hidden from the tool's schema.
+# See: https://modelcontextprotocol.io/specification/latest/client/elicitation
+from typing import Annotated
+
 from pydantic import BaseModel, Field
-from mcp.server.fastmcp import Context
+from mcp.server.mcpserver import AcceptedElicitation, Elicit, ElicitationResult, Resolve
 
 
 class UserFeedback(BaseModel):
@@ -13,17 +18,17 @@ class UserFeedback(BaseModel):
     rating: int = Field(description="Rating from 1 to 5", ge=1, le=5)
 
 
-@mcp.tool()
-async def collect_feedback(ctx: Context) -> str:
-    """Collect feedback from the user interactively."""
-    result = await ctx.elicit(
-        message="We'd love your feedback! Please fill in the form below.",
-        schema=UserFeedback,
-    )
+async def ask_for_feedback() -> Elicit[UserFeedback]:
+    return Elicit("We'd love your feedback! Please fill in the form below.", UserFeedback)
 
-    if result.action == "accept":
-        return f"Thanks! You rated us {result.data.rating}/5: {result.data.message}"
-    elif result.action == "decline":
+
+@mcp.tool()
+async def collect_feedback(
+    feedback: Annotated[ElicitationResult[UserFeedback], Resolve(ask_for_feedback)],
+) -> str:
+    """Collect feedback from the user interactively."""
+    if isinstance(feedback, AcceptedElicitation):
+        return f"Thanks! You rated us {feedback.data.rating}/5: {feedback.data.message}"
+    if feedback.action == "decline":
         return "No worries, maybe next time!"
-    else:
-        return "Feedback cancelled."
+    return "Feedback cancelled."
