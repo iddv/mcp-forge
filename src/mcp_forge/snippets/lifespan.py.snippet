@@ -1,0 +1,24 @@
+
+# --- mcp-forge:lifespan ---
+# The lifespan runs once at startup/shutdown: open connections, load models or
+# config here and share them with every request through the context.
+# See: https://py.sdk.modelcontextprotocol.io/
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+
+
+@dataclass
+class AppContext:
+    """Resources shared across requests (swap in a DB pool, HTTP client, ...)."""
+
+    cache: dict[str, str] = field(default_factory=dict)
+
+
+@asynccontextmanager
+async def app_lifespan(server) -> AsyncIterator[AppContext]:
+    app_context = AppContext()
+    try:
+        yield app_context
+    finally:
+        app_context.cache.clear()

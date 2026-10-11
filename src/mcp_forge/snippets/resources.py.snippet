@@ -1,10 +1,15 @@
 
-# --- MCP Resource: config ---
+# --- mcp-forge:resources ---
 # Resources expose data that clients can read.
-# See: https://modelcontextprotocol.io/docs/concepts/resources
+# See: https://modelcontextprotocol.io/specification/latest/server/resources
 
 
-@mcp.resource("config://app", description="Application configuration")
+@mcp.resource(
+    "config://app",
+    title="App configuration",
+    description="Application configuration",
+    mime_type="application/json",
+)
 def get_config() -> str:
     """Return application configuration as JSON."""
     import json

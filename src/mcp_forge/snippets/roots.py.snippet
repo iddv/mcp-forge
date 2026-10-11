@@ -1,0 +1,23 @@
+
+# --- mcp-forge:roots ---
+# Roots tell the server which directories/URIs the user has opened in the
+# client (e.g. the current workspace).
+# Note: roots are deprecated as of 2026-07-28 (removal no earlier than 12
+# months later); prefer explicit path arguments for new tools.
+# See: https://modelcontextprotocol.io/specification/latest/client/roots
+from typing import Annotated
+
+from mcp.server.mcpserver import ListRoots, Resolve
+from mcp.types import ListRootsResult
+
+
+def client_roots() -> ListRoots:
+    return ListRoots()
+
+
+@mcp.tool()
+async def list_workspace_roots(
+    roots: Annotated[ListRootsResult, Resolve(client_roots)],
+) -> list[str]:
+    """List the workspace roots the client has shared with this server."""
+    return [str(root.uri) for root in roots.roots]

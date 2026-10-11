@@ -1,0 +1,22 @@
+
+# --- mcp-forge:structured-output ---
+# Returning a pydantic model (or TypedDict/dataclass) gives the tool an
+# outputSchema, and results carry machine-readable structuredContent
+# alongside the text rendering.
+# See: https://modelcontextprotocol.io/specification/latest/server/tools#structured-content
+from pydantic import BaseModel, Field
+
+
+class WeatherReport(BaseModel):
+    """Structured weather data."""
+
+    city: str
+    temperature_c: float = Field(description="Temperature in Celsius")
+    conditions: str
+    humidity_pct: int = Field(ge=0, le=100)
+
+
+@mcp.tool(title="Get weather")
+def get_weather(city: str) -> WeatherReport:
+    """Get the current weather for a city (example data)."""
+    return WeatherReport(city=city, temperature_c=21.5, conditions="partly cloudy", humidity_pct=60)

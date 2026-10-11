@@ -1,22 +1,19 @@
-from pathlib import Path
-
 import pytest
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import Client
 
-SERVER_PATH = str(Path(__file__).parent.parent / "server.py")
+from server import mcp
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
 
 
 @pytest.fixture
 async def client():
-    server_params = StdioServerParameters(
-        command="python3",
-        args=[SERVER_PATH],
-    )
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            yield session
+    # In-process client: no subprocess, speaks the latest protocol revision.
+    async with Client(mcp) as client:
+        yield client
 
 
 @pytest.mark.anyio

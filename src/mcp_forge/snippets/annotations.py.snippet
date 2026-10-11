@@ -1,0 +1,26 @@
+
+# --- mcp-forge:annotations ---
+# Tool annotations tell clients how a tool behaves so they can decide when to
+# ask for confirmation. They are hints, not security guarantees.
+# See: https://modelcontextprotocol.io/specification/latest/server/tools
+from mcp.types import ToolAnnotations
+
+_notes: dict[str, str] = {}
+
+
+@mcp.tool(
+    title="Read note",
+    annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+)
+def read_note(key: str) -> str:
+    """Read a note by key."""
+    return _notes.get(key, f"No note named {key!r}")
+
+
+@mcp.tool(
+    title="Delete note",
+    annotations=ToolAnnotations(destructive_hint=True, idempotent_hint=True, open_world_hint=False),
+)
+def delete_note(key: str) -> str:
+    """Delete a note by key."""
+    return "Deleted" if _notes.pop(key, None) is not None else "Nothing to delete"

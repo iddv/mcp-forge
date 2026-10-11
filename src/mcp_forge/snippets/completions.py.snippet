@@ -1,0 +1,27 @@
+
+# --- mcp-forge:completions ---
+# Completions give clients argument autocompletion for prompts and resource
+# templates (like IDE suggestions).
+# See: https://modelcontextprotocol.io/specification/latest/server/utilities/completion
+from mcp.types import Completion, CompletionArgument, CompletionContext, PromptReference, ResourceTemplateReference
+
+LANGUAGES = ["go", "javascript", "python", "rust", "typescript"]
+
+
+@mcp.prompt(title="Code review", description="Review code in a given language")
+def code_review(language: str, code: str) -> str:
+    """Ask the model to review a code snippet."""
+    return f"Review this {language} code for bugs and readability:\n\n```{language}\n{code}\n```"
+
+
+@mcp.completion()
+async def complete_argument(
+    ref: PromptReference | ResourceTemplateReference,
+    argument: CompletionArgument,
+    context: CompletionContext | None,
+) -> Completion | None:
+    """Suggest values for prompt and resource template arguments."""
+    if isinstance(ref, PromptReference) and ref.name == "code_review" and argument.name == "language":
+        matches = [lang for lang in LANGUAGES if lang.startswith(argument.value.lower())]
+        return Completion(values=matches, total=len(matches), has_more=False)
+    return None

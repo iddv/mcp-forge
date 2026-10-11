@@ -1,0 +1,16 @@
+
+# --- mcp-forge:lifespan-tools ---
+from mcp.server.mcpserver import Context
+
+
+@mcp.tool()
+def cache_put(key: str, value: str, ctx: Context) -> str:
+    """Store a value in the server's lifespan cache."""
+    ctx.request_context.lifespan_context.cache[key] = value
+    return f"Stored {key!r}"
+
+
+@mcp.tool()
+def cache_get(key: str, ctx: Context) -> str:
+    """Read a value from the server's lifespan cache."""
+    return ctx.request_context.lifespan_context.cache.get(key, f"No value for {key!r}")

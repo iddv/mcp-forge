@@ -1,0 +1,25 @@
+
+# --- mcp-forge:resource-templates ---
+# Resource templates are parameterised URIs (RFC 6570). Clients discover them
+# via resources/templates/list and fill in the variables.
+# See: https://modelcontextprotocol.io/specification/latest/server/resources#resource-templates
+import json
+
+_USERS = {
+    "1": {"name": "Ada Lovelace", "role": "admin"},
+    "2": {"name": "Alan Turing", "role": "member"},
+}
+
+
+@mcp.resource(
+    "users://{user_id}/profile",
+    title="User profile",
+    description="Profile for a user by ID",
+    mime_type="application/json",
+)
+def get_user_profile(user_id: str) -> str:
+    """Return a user's profile as JSON."""
+    user = _USERS.get(user_id)
+    if user is None:
+        raise ValueError(f"Unknown user: {user_id}")
+    return json.dumps({"id": user_id, **user})

@@ -1,0 +1,30 @@
+
+# --- mcp-forge:sampling ---
+# Sampling lets a tool ask the client's LLM to generate text, so the server
+# needs no API keys of its own. The Resolve() parameter is filled before the
+# tool runs and is hidden from the tool's input schema.
+# Note: sampling is deprecated as of 2026-07-28 (removal no earlier than 12
+# months later); prefer returning data and letting the host model reason.
+# See: https://modelcontextprotocol.io/specification/latest/client/sampling
+from typing import Annotated
+
+from mcp.server.mcpserver import Resolve, Sample
+from mcp.types import CreateMessageResult, SamplingMessage, TextContent
+
+
+def draft_haiku(topic: str) -> Sample:
+    return Sample(
+        [SamplingMessage(role="user", content=TextContent(type="text", text=f"Write a haiku about {topic}."))],
+        max_tokens=100,
+        system_prompt="You are a concise poet.",
+    )
+
+
+@mcp.tool()
+async def write_haiku(
+    topic: str,
+    completion: Annotated[CreateMessageResult, Resolve(draft_haiku)],
+) -> str:
+    """Write a haiku about a topic using the client's LLM."""
+    content = completion.content
+    return content.text if isinstance(content, TextContent) else str(content)

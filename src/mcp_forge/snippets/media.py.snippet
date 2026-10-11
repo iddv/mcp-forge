@@ -1,0 +1,41 @@
+
+# --- mcp-forge:media ---
+# Tools can return rich content: images/audio, and resource links that point
+# the client at a resource it can read later instead of inlining it.
+# See: https://modelcontextprotocol.io/specification/latest/server/tools#tool-result
+import base64
+
+from mcp.server.mcpserver import Image
+from mcp.types import ContentBlock, ResourceLink, TextContent
+
+# 1x1 transparent PNG (swap for real image bytes or Image(path="chart.png"))
+_PIXEL_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
+
+
+@mcp.tool()
+def render_chart() -> Image:
+    """Render a chart as a PNG image."""
+    return Image(data=_PIXEL_PNG, format="png")
+
+
+@mcp.resource("reports://latest", title="Latest report", mime_type="text/markdown")
+def latest_report() -> str:
+    """The most recent generated report."""
+    return "# Report\n\nEverything is fine."
+
+
+@mcp.tool()
+def generate_report() -> list[ContentBlock]:
+    """Generate a report and return a link to it."""
+    return [
+        TextContent(type="text", text="Report generated."),
+        ResourceLink(
+            type="resource_link",
+            uri="reports://latest",
+            name="latest-report",
+            title="Latest report",
+            mime_type="text/markdown",
+        ),
+    ]

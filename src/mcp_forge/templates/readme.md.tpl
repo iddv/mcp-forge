@@ -5,7 +5,7 @@
 ## Setup
 
 ```bash
-pip install -e .
+pip install -e ".[test]"
 ```
 
 ## Run
@@ -14,14 +14,13 @@ pip install -e .
 # Run with MCP Inspector
 mcp dev server.py
 
-# Run directly
+# Run directly (stdio)
 python server.py
 ```
 
 ## Test
 
 ```bash
-pip install -e ".[test]"
 pytest
 ```
 

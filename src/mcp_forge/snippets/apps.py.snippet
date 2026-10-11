@@ -1,0 +1,27 @@
+
+# --- mcp-forge:apps ---
+# MCP Apps (io.modelcontextprotocol/ui extension): a tool links to a ui://
+# HTML resource that supporting hosts render in a sandboxed iframe. Always
+# return meaningful text too, for clients that don't render apps.
+# See: https://modelcontextprotocol.io/specification/draft/extensions/apps
+from mcp.server.apps import Apps
+from mcp.server.mcpserver import Context
+
+apps = Apps()
+
+DASHBOARD_URI = "ui://{{name}}/dashboard.html"
+DASHBOARD_HTML = """<!doctype html>
+<html>
+  <body style="font-family: system-ui; padding: 1rem">
+    <h1>{{name}}</h1>
+    <p>Server is running. Edit DASHBOARD_HTML in server.py to build your UI.</p>
+  </body>
+</html>
+"""
+
+apps.add_html_resource(DASHBOARD_URI, DASHBOARD_HTML, title="Dashboard")
+
+
+@apps.tool(resource_uri=DASHBOARD_URI, description="Show the server dashboard")
+def show_dashboard(ctx: Context) -> str:
+    return "{{name}} dashboard: server is running."
