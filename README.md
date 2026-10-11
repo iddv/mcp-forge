@@ -107,13 +107,16 @@ mcp-forge install --client vscode
 | `annotations` | Tool `title` and behaviour hints (`read_only_hint`, `destructive_hint`, ...) |
 | `structured-output` | Tool returning a pydantic model, giving `outputSchema` and `structuredContent` |
 | `media` | Image content and `ResourceLink` results |
+| `errors` | `ToolError` for expected failures that the model sees and can recover from |
+| `notifications` | Resource-updated and tools-list-changed notifications, with a tool registered at runtime |
 | `context` | Progress reporting and request metadata via `Context` |
 | `elicitation` | Ask the user for structured input with `Resolve` + `Elicit` |
 | `sampling` | Ask the client's LLM with `Resolve` + `Sample` (deprecated in the 2026-07-28 spec) |
 | `roots` | Read the client's workspace roots with `Resolve` + `ListRoots` (deprecated in the 2026-07-28 spec) |
 | `lifespan` | Typed startup/shutdown context shared with every request |
-| `http` | Streamable HTTP transport (`python server.py --http [--stateless]`) and a `/health` route |
-| `auth` | OAuth 2.1 resource server: `TokenVerifier` + `AuthSettings` (requires `http`) |
+| `middleware` | Request middleware (timing/audit logging) wrapping every MCP request |
+| `http` | Streamable HTTP transport (`python server.py --http [--stateless]`, address via `MCP_HOST`/`MCP_PORT`), a `/health` route, and a shared `MCP_REQUEST_STATE_KEY` for multi-replica deployments |
+| `auth` | OAuth 2.1 resource server: `TokenVerifier` + `AuthSettings` (requires `http`; set `MCP_PUBLIC_URL` behind a proxy) |
 | `apps` | MCP Apps extension: an interactive `ui://` HTML view bound to a tool |
 
 Elicitation, sampling and roots use `Resolve` parameters rather than calling `ctx.elicit()` directly.
@@ -126,6 +129,7 @@ That way they work on both stateless 2026-07-28 connections (Multi Round-Trip Re
 | `skill` | `skills/<name>/SKILL.md`: an Agent Skill describing when and how to use the server's tools |
 | `plugin` | `.claude-plugin/plugin.json` (bundles the server via `${CLAUDE_PLUGIN_ROOT}`) and `marketplace.json`; also adds `skill` |
 | `mcpb` | `manifest.json` + `.mcpbignore` for an [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) (Claude Desktop one-click install) |
+| `docker` | `Dockerfile` + `.dockerignore` serving the server over Streamable HTTP (requires `http`) |
 | `registry` | `server.json` for the [MCP Registry](https://registry.modelcontextprotocol.io) and the `mcp-name` README marker |
 
 Add distribution features after your tools: `skill` and `mcpb` record the tools present at generation
