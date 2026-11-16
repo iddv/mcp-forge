@@ -1,6 +1,6 @@
 [project]
 name = "mcp-forge"
-version = "3.0.0"
+dynamic = ["version"]
 description = "Scaffold, extend, and distribute MCP servers"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,6 +24,9 @@ mcp-forge = "mcp_forge.cli:app"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/mcp_forge/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_forge"]

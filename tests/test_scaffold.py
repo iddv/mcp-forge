@@ -79,6 +79,20 @@ class TestScaffoldProject:
         content = server_py.read_text()
         assert "A cool server" in content
 
+    def test_description_with_quotes_and_backslashes(self, tmp_path):
+        import ast
+
+        description = 'Says "hi" from C:\\temp'
+        project_dir = scaffold_project("my-server", str(tmp_path), description=description)
+        ast.parse((project_dir / "server.py").read_text())
+        pyproject = (project_dir / "pyproject.toml").read_text()
+        try:
+            import tomllib
+        except ModuleNotFoundError:  # Python 3.10
+            assert 'description = "Says \\"hi\\" from C:\\\\temp"' in pyproject
+        else:
+            assert tomllib.loads(pyproject)["project"]["description"] == description
+
     def test_refuses_existing_directory(self, tmp_path):
         (tmp_path / "my-server").mkdir()
         with pytest.raises(FileExistsError):
@@ -87,3 +101,27 @@ class TestScaffoldProject:
     def test_refuses_invalid_name(self, tmp_path):
         with pytest.raises(ValueError):
             scaffold_project("bad name!", str(tmp_path))
+
+
+class TestNewCommand:
+    def test_unknown_feature_fails_before_creating_anything(self, tmp_path, monkeypatch):
+        from typer.testing import CliRunner
+
+        from mcp_forge.cli import app
+
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(app, ["new", "my-server", "--with", "resources,bogus"])
+        assert result.exit_code == 1
+        assert "bogus" in result.output
+        assert not (tmp_path / "my-server").exists()
+
+
+class TestVersion:
+    def test_plugin_manifest_matches_package_version(self):
+        import json
+
+        from mcp_forge import __version__
+
+        root = Path(__file__).resolve().parent.parent
+        plugin = json.loads((root / ".claude-plugin" / "plugin.json").read_text())
+        assert plugin["version"] == __version__

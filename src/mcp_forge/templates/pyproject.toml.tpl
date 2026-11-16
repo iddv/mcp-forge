@@ -1,7 +1,7 @@
 [project]
 name = "{{name}}"
 version = "0.1.0"
-description = "{{description}}"
+description = {{description_str}}
 requires-python = ">=3.10"
 dependencies = [
     "mcp[cli]>=2.3,<3",

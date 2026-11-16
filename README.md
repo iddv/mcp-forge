@@ -40,7 +40,7 @@ mcp-forge install
 
 ### `mcp-forge new <name>`
 
-Create a new FastMCP server project with working tests, dependencies, and a ready-to-run example tool.
+Create a new MCP server project (`MCPServer`) with working tests, dependencies, and a ready-to-run example tool.
 
 ```bash
 mcp-forge new my-server
@@ -77,7 +77,21 @@ mcp-forge install
 mcp-forge install --client claude
 mcp-forge install --client cursor
 mcp-forge install --client vscode
+
+# See what would be written, without changing any file
+mcp-forge install --dry-run
 ```
+
+The entry runs the server with the project's own dependencies: `uv run --directory <project> python server.py`
+when uv is installed, otherwise the project's `.venv` Python.
+
+Auto-detect picks global clients whose config directory exists. Project-level clients (VS Code, Kiro,
+JetBrains) are picked only when the project already has their folder, and Claude Code when `~/.claude`
+exists. Use `--client` to add one anyway.
+
+A config file that isn't plain JSON (Zed's `settings.json` often has comments) is left untouched: the
+other clients are still updated, and mcp-forge prints the entry to add by hand. Existing files are
+backed up to `<file>.bak` before they change.
 
 ## Supported Clients
 

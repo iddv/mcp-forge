@@ -25,7 +25,7 @@ It needs version 3.0 or later. Older versions generate `FastMCP` code that break
 3. **Write the real tools** in `server.py`. Follow the patterns the snippets establish (below).
 4. **Test**: `pytest`. The generated tests use the in-process `Client(mcp)`. Add a test for every tool.
    Use `mcp dev server.py` for the MCP Inspector.
-5. **Register**: `mcp-forge install` (auto-detects clients) or `mcp-forge install --client claude-code`.
+5. **Register**: `mcp-forge install` (auto-detects clients) or `mcp-forge install --client claude-code`. Add `--dry-run` to preview. The entry uses `uv run --directory <project>`, so the server gets the project's dependencies.
 6. **Distribute** (optional): `mcp-forge add plugin` (Claude Code plugin + skill + marketplace),
    `mcp-forge add mcpb` (Claude Desktop bundle), `mcp-forge add docker` (container serving HTTP),
    `mcp-forge add registry` (MCP Registry `server.json`).

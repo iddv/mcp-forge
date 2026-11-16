@@ -1,5 +1,6 @@
 """Scaffold new MCP server projects from templates."""
 
+import json
 import re
 from importlib.resources import files
 from pathlib import Path
@@ -49,7 +50,12 @@ def scaffold_project(
     project_dir.mkdir(parents=True)
     (project_dir / "tests").mkdir()
 
-    replacements = {"{{name}}": name, "{{description}}": description}
+    # {{description_str}} is a quoted string literal, valid in both Python and TOML
+    replacements = {
+        "{{name}}": name,
+        "{{description_str}}": json.dumps(description, ensure_ascii=False),
+        "{{description}}": description,
+    }
 
     file_map = {
         "server.py.tpl": "server.py",

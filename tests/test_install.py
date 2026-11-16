@@ -6,39 +6,41 @@ from unittest.mock import patch
 
 import pytest
 
+from typer.testing import CliRunner
+
+from mcp_forge.cli import app
 from mcp_forge.install import (
     Client,
+    ConfigError,
     detect_clients,
     get_server_entry,
     install_in_client,
-    get_python_command,
     list_clients,
 )
 
 
-class TestGetPythonCommand:
-    def test_returns_python3_outside_venv(self):
-        with patch.dict(os.environ, {}, clear=True):
-            with patch("mcp_forge.install._in_virtualenv", return_value=False):
-                assert get_python_command() == "python3"
-
-    def test_returns_absolute_path_in_venv(self):
-        with patch("mcp_forge.install._in_virtualenv", return_value=True):
-            cmd = get_python_command()
-            assert os.path.isabs(cmd)
-
-
 class TestGetServerEntry:
-    def test_basic_entry(self):
-        entry = get_server_entry("my-server", Path("/home/user/my-server"))
+    def test_uses_uv_when_available(self, tmp_path):
+        with patch("mcp_forge.install.shutil.which", return_value="/usr/bin/uv"):
+            entry = get_server_entry("my-server", tmp_path)
         assert entry == {
-            "command": entry["command"],  # python3 or abs path
-            "args": ["/home/user/my-server/server.py"],
+            "command": "/usr/bin/uv",
+            "args": ["run", "--directory", str(tmp_path), "python", "server.py"],
         }
 
-    def test_uses_absolute_path(self):
-        entry = get_server_entry("my-server", Path("/home/user/my-server"))
-        assert os.path.isabs(entry["args"][0])
+    def test_uses_project_venv_without_uv(self, tmp_path):
+        python = tmp_path / ".venv" / "bin" / "python"
+        python.parent.mkdir(parents=True)
+        python.touch()
+        with patch("mcp_forge.install.shutil.which", return_value=None):
+            entry = get_server_entry("my-server", tmp_path)
+        assert entry == {"command": str(python), "args": [str(tmp_path / "server.py")]}
+
+    def test_never_uses_mcp_forges_own_python(self, tmp_path):
+        with patch("mcp_forge.install.shutil.which", return_value=None):
+            entry = get_server_entry("my-server", tmp_path)
+        assert entry["command"] != sys.executable
+        assert entry == {"command": "python3", "args": [str(tmp_path / "server.py")]}
 
 
 class TestDetectClients:
@@ -178,16 +180,40 @@ class TestInstallInClient:
 
 
 class TestDetectProjectLevel:
-    def test_project_level_always_detected(self, tmp_path):
+    def test_project_level_not_detected_without_marker(self, tmp_path):
+        with patch("mcp_forge.install.CLIENTS", {
+            "vscode": Client(
+                name="VS Code",
+                config_path=tmp_path / ".vscode" / "mcp.json",
+                project_level=True,
+                detect=[tmp_path / ".vscode"],
+            ),
+        }):
+            assert detect_clients() == {}
+
+    def test_project_level_detected_with_marker(self, tmp_path):
+        (tmp_path / ".vscode").mkdir()
+        with patch("mcp_forge.install.CLIENTS", {
+            "vscode": Client(
+                name="VS Code",
+                config_path=tmp_path / ".vscode" / "mcp.json",
+                project_level=True,
+                detect=[tmp_path / ".vscode"],
+            ),
+        }):
+            assert "vscode" in detect_clients()
+
+    def test_claude_code_detected_from_home(self, tmp_path):
+        (tmp_path / "home" / ".claude").mkdir(parents=True)
         with patch("mcp_forge.install.CLIENTS", {
             "claude-code": Client(
                 name="Claude Code",
-                config_path=tmp_path / ".mcp.json",
+                config_path=tmp_path / "project" / ".mcp.json",
                 project_level=True,
+                detect=[tmp_path / "project" / ".mcp.json", tmp_path / "home" / ".claude"],
             ),
         }):
-            found = detect_clients()
-            assert "claude-code" in found
+            assert "claude-code" in detect_clients()
 
     def test_project_level_specific(self, tmp_path):
         with patch("mcp_forge.install.CLIENTS", {
@@ -195,10 +221,88 @@ class TestDetectProjectLevel:
                 name="VS Code",
                 config_path=tmp_path / ".vscode" / "mcp.json",
                 project_level=True,
+                detect=[tmp_path / ".vscode"],
             ),
         }):
             found = detect_clients(specific="vscode")
             assert "vscode" in found
+
+
+class TestConfigErrors:
+    def _client(self, path, key="mcpServers"):
+        return Client(name="Test", config_path=path, config_key=key)
+
+    def test_jsonc_raises_and_leaves_file_alone(self, tmp_path):
+        config_path = tmp_path / "settings.json"
+        original = '{\n  // my settings\n  "theme": "dark"\n}\n'
+        config_path.write_text(original)
+        with pytest.raises(ConfigError, match="not plain JSON"):
+            install_in_client(self._client(config_path), "s", {"command": "x"})
+        assert config_path.read_text() == original
+        assert not config_path.with_suffix(".json.bak").exists()
+
+    def test_non_object_root(self, tmp_path):
+        config_path = tmp_path / "mcp.json"
+        config_path.write_text("[]")
+        with pytest.raises(ConfigError):
+            install_in_client(self._client(config_path), "s", {"command": "x"})
+
+    def test_non_object_servers(self, tmp_path):
+        config_path = tmp_path / "mcp.json"
+        config_path.write_text('{"mcpServers": []}')
+        with pytest.raises(ConfigError):
+            install_in_client(self._client(config_path), "s", {"command": "x"})
+
+    def test_empty_file_is_treated_as_empty_config(self, tmp_path):
+        config_path = tmp_path / "mcp.json"
+        config_path.write_text("")
+        assert install_in_client(self._client(config_path), "s", {"command": "x"})
+        assert json.loads(config_path.read_text()) == {"mcpServers": {"s": {"command": "x"}}}
+
+
+class TestDryRun:
+    def test_writes_nothing(self, tmp_path):
+        config_path = tmp_path / "sub" / "mcp.json"
+        client = Client(name="Test", config_path=config_path)
+        assert install_in_client(client, "s", {"command": "x"}, dry_run=True)
+        assert not config_path.parent.exists()
+
+
+class TestInstallCommand:
+    def _project(self, tmp_path):
+        project = tmp_path / "my-server"
+        project.mkdir()
+        (project / "server.py").write_text("")
+        return project
+
+    def test_continues_past_a_broken_config(self, tmp_path, monkeypatch):
+        project = self._project(tmp_path)
+        monkeypatch.chdir(project)
+        broken = tmp_path / "zed" / "settings.json"
+        broken.parent.mkdir()
+        broken.write_text("{ // comment\n}")
+        good = tmp_path / "cursor" / "mcp.json"
+        good.parent.mkdir()
+        clients = {
+            "zed": Client(name="Zed", config_path=broken, config_key="context_servers"),
+            "cursor": Client(name="Cursor", config_path=good),
+        }
+        with patch("mcp_forge.install.CLIENTS", clients):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        assert "Zed" in result.output and "not plain JSON" in result.output
+        assert "my-server" in json.loads(good.read_text())["mcpServers"]
+
+    def test_dry_run_changes_nothing(self, tmp_path, monkeypatch):
+        project = self._project(tmp_path)
+        monkeypatch.chdir(project)
+        config = tmp_path / "cursor" / "mcp.json"
+        config.parent.mkdir()
+        with patch("mcp_forge.install.CLIENTS", {"cursor": Client(name="Cursor", config_path=config)}):
+            result = CliRunner().invoke(app, ["install", "--dry-run"])
+        assert result.exit_code == 0, result.output
+        assert "Would install" in result.output
+        assert not config.exists()
 
 
 class TestListClients:

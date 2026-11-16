@@ -238,3 +238,20 @@ class TestMain:
         content = server_py.read_text()
         assert "# custom" in content
         assert '"--http"' not in content
+
+    def test_custom_main_gives_a_warning(self, tmp_path):
+        from mcp_forge.scaffold import scaffold_project
+
+        project_dir = scaffold_project("my-server", str(tmp_path))
+        server_py = project_dir / "server.py"
+        server_py.write_text(server_py.read_text().replace("    mcp.run()\n", "    mcp.run()  # custom\n"))
+        result = add_feature("http", project_dir)
+        assert len(result.warnings) == 1
+        assert "main()" in result.warnings[0]
+        assert "--http" in result.warnings[0]
+
+    def test_default_main_gives_no_warning(self, tmp_path):
+        from mcp_forge.scaffold import scaffold_project
+
+        project_dir = scaffold_project("my-server", str(tmp_path))
+        assert add_feature("http", project_dir).warnings == []

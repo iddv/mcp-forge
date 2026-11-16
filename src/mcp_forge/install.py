@@ -3,7 +3,7 @@
 import json
 import os
 import platform
-import sys
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -16,6 +16,12 @@ class Client:
     config_path: Path
     config_key: str = "mcpServers"
     project_level: bool = False
+    detect: List[Path] = field(default_factory=list)
+    """Paths that show the client is in use. Defaults to the config file's directory."""
+
+
+class ConfigError(Exception):
+    """A client config file that can't be read or updated safely."""
 
 
 def _get_claude_desktop_config_path() -> Path:
@@ -55,11 +61,13 @@ def _get_clients() -> Dict[str, Client]:
             config_path=cwd / ".vscode" / "mcp.json",
             config_key="servers",
             project_level=True,
+            detect=[cwd / ".vscode"],
         ),
         "kiro": Client(
             name="Kiro",
             config_path=cwd / ".kiro" / "settings" / "mcp.json",
             project_level=True,
+            detect=[cwd / ".kiro", home / ".kiro"],
         ),
         "zed": Client(
             name="Zed",
@@ -70,12 +78,14 @@ def _get_clients() -> Dict[str, Client]:
             name="JetBrains",
             config_path=cwd / ".junie" / "mcp.json",
             project_level=True,
+            detect=[cwd / ".junie"],
         ),
         # CLI tools
         "claude-code": Client(
             name="Claude Code",
             config_path=cwd / ".mcp.json",
             project_level=True,
+            detect=[cwd / ".mcp.json", home / ".claude"],
         ),
         # Extensions and plugins
         "continue": Client(
@@ -101,26 +111,24 @@ def _get_clients() -> Dict[str, Client]:
 CLIENTS: Dict[str, Client] = {}
 
 
-def _in_virtualenv() -> bool:
-    """Check if running inside a virtual environment."""
-    return hasattr(sys, "real_prefix") or (
-        hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
-    )
-
-
-def get_python_command() -> str:
-    """Get the Python command to use in client configs.
-
-    Returns the absolute path to the venv Python if in a virtual environment,
-    otherwise returns 'python3'.
-    """
-    if _in_virtualenv():
-        return sys.executable
-    return "python3"
+def _project_python(project_dir: Path) -> Optional[Path]:
+    """The project's own virtualenv Python, if it has one."""
+    for candidate in (
+        project_dir / ".venv" / "bin" / "python",
+        project_dir / ".venv" / "Scripts" / "python.exe",
+    ):
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def get_server_entry(name: str, project_dir: Path) -> dict:
     """Build the MCP server config entry for a project.
+
+    The server needs the project's own dependencies, not mcp-forge's, so the
+    entry runs it with ``uv run --directory <project>`` when uv is installed,
+    or with the project's ``.venv`` Python. Failing both it falls back to
+    ``python3``, which only works if ``mcp`` is installed for that Python.
 
     Args:
         name: Server name.
@@ -129,10 +137,16 @@ def get_server_entry(name: str, project_dir: Path) -> dict:
     Returns:
         Dict with 'command' and 'args' keys.
     """
-    return {
-        "command": get_python_command(),
-        "args": [str(project_dir / "server.py")],
-    }
+    uv = shutil.which("uv")
+    if uv:
+        return {
+            "command": uv,
+            "args": ["run", "--directory", str(project_dir), "python", "server.py"],
+        }
+    venv_python = _project_python(project_dir)
+    if venv_python:
+        return {"command": str(venv_python), "args": [str(project_dir / "server.py")]}
+    return {"command": "python3", "args": [str(project_dir / "server.py")]}
 
 
 def list_clients() -> List[str]:
@@ -142,6 +156,11 @@ def list_clients() -> List[str]:
 
 def detect_clients(specific: Optional[str] = None) -> Dict[str, Client]:
     """Detect which MCP clients are installed.
+
+    Global clients count as installed when their config directory exists.
+    Project-level clients count when the project already has their config
+    directory (or, for Claude Code, when ~/.claude exists), so a bare
+    ``mcp-forge install`` doesn't create config for editors you don't use.
 
     Args:
         specific: If provided, only check this client key.
@@ -155,19 +174,18 @@ def detect_clients(specific: Optional[str] = None) -> Dict[str, Client]:
         if specific not in clients:
             return {}
         client = clients[specific]
-        if client.project_level:
-            return {specific: client}
-        if client.config_path.parent.exists():
+        # A project-level config can always be created on request
+        if client.project_level or _in_use(client):
             return {specific: client}
         return {}
 
-    found = {}
-    for key, client in clients.items():
-        if client.project_level:
-            found[key] = client
-        elif client.config_path.parent.exists():
-            found[key] = client
-    return found
+    return {key: client for key, client in clients.items() if _in_use(client)}
+
+
+def _in_use(client: Client) -> bool:
+    """Whether the client looks installed or already used for this project."""
+    paths = client.detect or [client.config_path.parent]
+    return any(path.exists() for path in paths)
 
 
 def install_in_client(
@@ -175,6 +193,7 @@ def install_in_client(
     server_name: str,
     entry: dict,
     force: bool = False,
+    dry_run: bool = False,
 ) -> bool:
     """Install an MCP server entry into a client's config file.
 
@@ -183,35 +202,47 @@ def install_in_client(
         server_name: Name for the server entry.
         entry: The server config dict (command + args).
         force: If True, overwrite existing entries.
+        dry_run: If True, check everything but write nothing.
 
     Returns:
-        True if installed, False if skipped (existing entry, no force).
+        True if installed (or would be), False if skipped (existing entry, no force).
+
+    Raises:
+        ConfigError: If the existing config isn't plain JSON with the expected
+            shape. The file is left untouched.
     """
     config_path = client.config_path
     config_key = client.config_key
 
-    # Read existing config or start fresh
+    existing_text = None
     if config_path.exists():
         existing_text = config_path.read_text()
-        config = json.loads(existing_text)
-
-        # Create backup
-        backup_path = config_path.with_suffix(config_path.suffix + ".bak")
-        backup_path.write_text(existing_text)
+        try:
+            config = json.loads(existing_text) if existing_text.strip() else {}
+        except json.JSONDecodeError as exc:
+            raise ConfigError(
+                f"{config_path} is not plain JSON (line {exc.lineno}: {exc.msg}). "
+                "It may contain comments; add the entry by hand."
+            ) from exc
     else:
         config = {}
 
-    if config_key not in config:
-        config[config_key] = {}
+    if not isinstance(config, dict):
+        raise ConfigError(f"{config_path} does not contain a JSON object.")
+    servers = config.setdefault(config_key, {})
+    if not isinstance(servers, dict):
+        raise ConfigError(f'"{config_key}" in {config_path} is not a JSON object.')
 
-    # Check for existing entry
-    if server_name in config[config_key] and not force:
+    if server_name in servers and not force:
         return False
+    if dry_run:
+        return True
 
-    config[config_key][server_name] = entry
-
-    # Write config
+    servers[server_name] = entry
     config_path.parent.mkdir(parents=True, exist_ok=True)
+    if existing_text is not None:
+        backup_path = config_path.with_suffix(config_path.suffix + ".bak")
+        backup_path.write_text(existing_text)
     config_path.write_text(json.dumps(config, indent=2) + "\n")
 
     return True
