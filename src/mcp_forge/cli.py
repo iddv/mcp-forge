@@ -1,5 +1,6 @@
 """MCP-Forge CLI — scaffold MCP server projects."""
 
+import json
 from pathlib import Path
 from typing import List
 
@@ -11,7 +12,13 @@ from rich.table import Table
 from mcp_forge import __version__
 from mcp_forge.add import add_feature, list_features
 from mcp_forge.scaffold import scaffold_project, validate_name
-from mcp_forge.install import detect_clients, get_server_entry, install_in_client, list_clients
+from mcp_forge.install import (
+    ConfigError,
+    detect_clients,
+    get_server_entry,
+    install_in_client,
+    list_clients,
+)
 
 app = typer.Typer(
     name="mcp-forge",
@@ -60,13 +67,15 @@ def new(
         rprint("Pick a different name or remove the existing directory.")
         raise typer.Exit(1)
 
-    project_dir = scaffold_project(name, str(target), description=description)
+    names = [n.strip() for n in (with_features or "").split(",") if n.strip()]
+    unknown = [n for n in names if n not in list_features()]
+    if unknown:
+        rprint(f"[red]Unknown feature:[/red] {', '.join(unknown)}")
+        rprint(f"Available: {', '.join(list_features())}")
+        raise typer.Exit(1)
 
-    # Add requested features
-    added = []
-    if with_features:
-        names = [name.strip() for name in with_features.split(",") if name.strip()]
-        added = _apply_features(names, project_dir)
+    project_dir = scaffold_project(name, str(target), description=description)
+    added = _apply_features(names, project_dir) if names else []
 
     summary = (
         f"[green]Created MCP server project:[/green] [bold]{name}[/bold]\n\n"
@@ -84,7 +93,7 @@ def new(
 def install(
     client: str = typer.Option(
         None, "--client", "-c",
-        help="Target a specific client (claude, cursor, windsurf, claude-code).",
+        help=f"Target one client: {', '.join(list_clients())}.",
     ),
     name: str = typer.Option(
         None, "--name",
@@ -93,6 +102,10 @@ def install(
     force: bool = typer.Option(
         False, "--force",
         help="Overwrite existing entries without prompting.",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run",
+        help="Show what would be written, without changing any file.",
     ),
 ):
     """Register this MCP server in client app configurations."""
@@ -106,6 +119,13 @@ def install(
         raise typer.Exit(1)
 
     entry = get_server_entry(server_name, project_dir.resolve())
+    if entry["command"] == "python3":
+        rprint(
+            "[yellow]uv not found and the project has no .venv.[/yellow] Clients will run "
+            "`python3 server.py`, which needs `mcp` installed for that Python. Install uv, "
+            "or run `python3 -m venv .venv && .venv/bin/pip install -e .` here, then re-run "
+            "with --force."
+        )
 
     # Detect clients
     if client:
@@ -121,25 +141,38 @@ def install(
             rprint("Use --client to specify one manually.")
             raise typer.Exit(1)
 
-    # Install in each client
     installed = []
     skipped = []
-    for key, client_obj in clients.items():
-        result = install_in_client(client_obj, server_name, entry, force=force)
-        if result:
-            installed.append(client_obj.name)
-        else:
-            skipped.append(client_obj.name)
+    failed = []
+    for client_obj in clients.values():
+        try:
+            if install_in_client(client_obj, server_name, entry, force=force, dry_run=dry_run):
+                installed.append(client_obj)
+            else:
+                skipped.append(client_obj)
+        except (ConfigError, OSError) as exc:
+            failed.append((client_obj, exc))
 
-    # Report
+    if dry_run:
+        rprint(f"[bold]Dry run.[/bold] Entry for '{server_name}':")
+        rprint(json.dumps(entry, indent=2))
     if installed:
-        rprint(f"\n[green]Installed '{server_name}' in:[/green]")
-        for client_name in installed:
-            rprint(f"  [green]✓[/green] {client_name}")
+        verb = "Would install" if dry_run else "Installed"
+        rprint(f"\n[green]{verb} '{server_name}' in:[/green]")
+        for c in installed:
+            rprint(f"  [green]✓[/green] {c.name}  [dim]{c.config_path}[/dim]")
     if skipped:
-        rprint(f"\n[yellow]Skipped (already exists, use --force to overwrite):[/yellow]")
-        for client_name in skipped:
-            rprint(f"  [yellow]–[/yellow] {client_name}")
+        rprint("\n[yellow]Skipped (already exists, use --force to overwrite):[/yellow]")
+        for c in skipped:
+            rprint(f"  [yellow]–[/yellow] {c.name}")
+    if failed:
+        rprint("\n[red]Could not update:[/red]")
+        for c, exc in failed:
+            rprint(f"  [red]✗[/red] {c.name}: {exc}")
+        if not dry_run:
+            rprint(f"\nEntry to add under \"{failed[0][0].config_key}\" by hand:")
+            rprint(json.dumps({server_name: entry}, indent=2))
+        raise typer.Exit(1)
 
 
 def _apply_features(names: List[str], project_dir: Path) -> List[str]:
@@ -165,6 +198,8 @@ def _apply_features(names: List[str], project_dir: Path) -> List[str]:
                 rprint(f"  [dim]Added dependencies: {', '.join(feat.deps)}[/dim]")
         for path in result.files:
             rprint(f"  [dim]Created {path.relative_to(project_dir)}[/dim]")
+        for warning in result.warnings:
+            rprint(f"[yellow]![/yellow] {warning}")
         if feature_name in result.skipped:
             rprint(f"[yellow]–[/yellow] [bold]{feature_name}[/bold] is already in this project")
         added += result.added

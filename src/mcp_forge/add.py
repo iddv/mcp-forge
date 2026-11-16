@@ -187,6 +187,8 @@ class AddResult:
     """Features that were already present."""
     files: List[Path] = field(default_factory=list)
     """Files created by distribution features."""
+    warnings: List[str] = field(default_factory=list)
+    """Changes that could not be made automatically and need doing by hand."""
 
 
 def list_features() -> Dict[str, Feature]:
@@ -366,7 +368,13 @@ def _apply(feature_name: str, project_dir: Path, result: AddResult) -> None:
     if feature.snippet:
         content = _insert_before_main(content, _read_snippet(feature.snippet, project_name))
     if feature.main:
-        content = _replace_main(content, feature.main)
+        updated = _replace_main(content, feature.main)
+        if updated == content:
+            result.warnings.append(
+                f"main() in server.py has been changed, so {feature_name} left it alone. "
+                f"For {feature_name} to take effect, make main() look like this:\n{feature.main}"
+            )
+        content = updated
 
     server_py.write_text(content)
     _add_deps(project_dir, feature.deps)
